@@ -847,6 +847,15 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { speak("Speech recognition requires Chrome or Edge."); return; }
+    // Unlock audio context with a silent play so ElevenLabs audio isn't blocked
+    // by Chrome's autoplay policy when the async AI response comes back later
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const buf = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.connect(ctx.destination); src.start(0);
+      ctx.resume().catch(() => {});
+    } catch {}
     if (recogRef.current) recogRef.current.abort();
     const r = new SR();
     r.lang = "en-US"; r.continuous = false; r.interimResults = false;
