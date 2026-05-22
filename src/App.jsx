@@ -473,7 +473,7 @@ ${memories.length ? memories.map(m => `- ${m.fact}`).join('\n') : "None yet."}
 When Mark tells you something worth remembering or you observe something significant, append: <remember>one-sentence fact</remember>
 When Mark explicitly asks you to remember something important, be sure to confirm you've noted it.
 
-AVAILABLE ACTIONS (append to end of response, only when taking an action):
+ACTIONS — this is critical: whenever you control anything (Spotify, lights, macros, coffee), you MUST append the exact action tag at the end of your response. Never say you're doing something without including the tag — the tag is what actually triggers the action.
 <action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
 <action>{"type":"spotify","cmd":"play|pause|next|prev|play:search query"}</action>
 <action>{"type":"log_macros","cal":0,"protein":0,"carbs":0,"fat":0}</action>
@@ -500,7 +500,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [...recentHistory, { role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system, messages: [...recentHistory, { role:"user", content:text }] })
       });
       return r.json();
     };
@@ -512,7 +512,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
         headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "llama3-8b-8192",
-          max_tokens: 400,
+          max_tokens: 600,
           messages: [{ role: "system", content: system }, ...recentHistory, { role: "user", content: text }]
         })
       });
