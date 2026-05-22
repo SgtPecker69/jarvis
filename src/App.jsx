@@ -202,7 +202,13 @@ function useSpotify() {
       } else if (cmd === "prev") {
         await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers:h });
       } else if (cmd.startsWith("play:")) {
-        const q  = cmd.slice(5);
+        // Clean the query — strip filler phrases the user might say
+        const raw = cmd.slice(5);
+        const q = raw
+          .replace(/\s+on\s+spotify\s*$/i, "")
+          .replace(/\s+for\s+me\s*$/i, "")
+          .replace(/\s+please\s*$/i, "")
+          .trim();
         // Search tracks only (not playlists) for specific song requests
         const sr = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`, { headers:h });
         const sd = await sr.json();
@@ -520,7 +526,8 @@ When Mark explicitly asks you to remember something important, be sure to confir
 
 ACTIONS — this is critical: whenever you control anything (Spotify, lights, macros, coffee), you MUST append the exact action tag at the end of your response. Never say you're doing something without including the tag — the tag is what actually triggers the action.
 <action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
-<action>{"type":"spotify","cmd":"play|pause|next|prev|play:search query"}</action>
+<action>{"type":"spotify","cmd":"play|pause|next|prev|play:Song Name Artist"}</action>
+For play:, use only the song title and artist name — never include "on Spotify", "for me", "please", or any other filler words. Example: play:Hey Jude The Beatles
 <action>{"type":"log_macros","cal":0,"protein":0,"carbs":0,"fat":0}</action>
 <action>{"type":"reset_macros"}</action>
 <action>{"type":"coffee","on":true}</action>${webhooks?.webhooks?.filter(w=>w.enabled).length ? `
