@@ -307,13 +307,18 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
   const speak = useCallback((text) => {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.rate = 1.05; u.pitch = 0.82; u.volume = 1;
+    u.rate = 0.92; u.pitch = 1.08; u.volume = 1;
     const voices = voicesRef.current;
-    const voice = voices.find(v => v.name === "Daniel") ||
-                  voices.find(v => v.name === "Arthur") ||
-                  voices.find(v => v.name.includes("UK English Male")) ||
-                  voices.find(v => v.lang === "en-GB") ||
-                  voices.find(v => v.lang.startsWith("en")) || null;
+    // Priority: Australian female — sexy, calming, real-sounding
+    const voice =
+      voices.find(v => v.name === "Karen") ||
+      voices.find(v => v.name === "Google Australian English") ||
+      voices.find(v => v.lang === "en-AU" && !v.name.toLowerCase().includes("male")) ||
+      voices.find(v => v.lang === "en-AU") ||
+      voices.find(v => v.name === "Samantha") ||
+      voices.find(v => v.name === "Tessa") ||
+      voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("female")) ||
+      voices.find(v => v.lang.startsWith("en")) || null;
     if (voice) u.voice = voice;
     u.onstart = () => setSpeaking(true);
     u.onend   = () => setSpeaking(false);
