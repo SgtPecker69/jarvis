@@ -117,6 +117,97 @@ function useLocalStorage(key, def) {
   return [val, set];
 }
 
+// ─── CLOUD SYNC ────────────────────────────────────────────────────────────────
+const SYNC_KEYS = [
+  "jarvis_api_key", "jarvis_groq_key", "jarvis_eleven_key", "jarvis_voice_id",
+  "jarvis_spotify_cid",
+  "jarvis_gcal_cid",
+  "jarvis_webhooks",
+  "jarvis_memories", "jarvis_memory_file", "jarvis_memory_updated",
+  "jarvis_continuous_mode",
+  "jarvis_crypto_enabled",
+  "jarvis_hue",
+  "jarvis_measurements",
+  "jarvis_sleep",
+];
+
+function useCloudSync() {
+  const [syncing,    setSyncing]    = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null); // null | "ok" | "error" | "not-configured"
+  const [lastSync,   setLastSync]   = useLocalStorage("jarvis_last_sync", null);
+
+  // Pull config from cloud and apply to localStorage, then reload
+  const pull = useCallback(async (silent = false) => {
+    setSyncing(true);
+    try {
+      const r    = await fetch("/api/config");
+      const data = await r.json();
+      if (!r.ok) {
+        setSyncStatus(data.error === "not-configured" ? "not-configured" : "error");
+        setSyncing(false);
+        return false;
+      }
+      if (Object.keys(data).length === 0) {
+        setSyncStatus("ok");
+        setSyncing(false);
+        if (!silent) alert("Cloud config is empty — push your current settings first.");
+        return false;
+      }
+      for (const [key, value] of Object.entries(data)) {
+        if (SYNC_KEYS.includes(key)) localStorage.setItem(key, JSON.stringify(value));
+      }
+      setLastSync(new Date().toISOString());
+      setSyncStatus("ok");
+      setSyncing(false);
+      if (!silent) window.location.reload();
+      return true;
+    } catch {
+      setSyncStatus("error");
+      setSyncing(false);
+      return false;
+    }
+  }, [setLastSync]);
+
+  // Push current localStorage to cloud
+  const push = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const config = {};
+      for (const key of SYNC_KEYS) {
+        const raw = localStorage.getItem(key);
+        if (raw !== null) {
+          try { config[key] = JSON.parse(raw); } catch { config[key] = raw; }
+        }
+      }
+      const r    = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        setSyncStatus(data.error === "not-configured" ? "not-configured" : "error");
+      } else {
+        setLastSync(new Date().toISOString());
+        setSyncStatus("ok");
+      }
+    } catch {
+      setSyncStatus("error");
+    }
+    setSyncing(false);
+  }, [setLastSync]);
+
+  // On first load of a new device (no local config), auto-pull silently
+  useEffect(() => {
+    const hasConfig = SYNC_KEYS.some(k => localStorage.getItem(k) !== null);
+    if (!hasConfig) {
+      pull(true).then(pulled => { if (pulled) window.location.reload(); });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { syncing, syncStatus, lastSync, pull, push };
+}
+
 // ─── SPOTIFY HOOK ──────────────────────────────────────────────────────────────
 function useSpotify() {
   const [clientId, setClientId] = useLocalStorage("jarvis_spotify_cid", "");
@@ -1768,7 +1859,7 @@ function SleepTab({ sleep, setSleep, notify }) {
 }
 
 // ─── INTEGRATIONS TAB ─────────────────────────────────────────────────────────
-function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
+function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSync }) {
   const [open,    setOpen]    = useState({});
   const [newWH,   setNewWH]   = useState({ name:"", url:"", triggers:"", description:"" });
   const [adding,  setAdding]  = useState(false);
@@ -1825,6 +1916,48 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
   return (
     <>
       <div style={{ fontSize:10, letterSpacing:"0.15em", color:C.dim, marginBottom:16 }}>◆ INTEGRATIONS HUB</div>
+
+      {/* ── CLOUD SYNC ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, fontWeight:600 }}>CLOUD SYNC</div>
+      {cloudSync && (
+        <IntCard id="cloud" icon="☁️" title="GitHub Gist Sync"
+          status={
+            cloudSync.syncStatus === "not-configured" ? "Not configured — see setup below" :
+            cloudSync.syncStatus === "error"          ? "Sync error — check Vercel env vars" :
+            cloudSync.lastSync                        ? `Last synced ${new Date(cloudSync.lastSync).toLocaleString()}` :
+            "Never synced — push your settings to get started"
+          }
+          statusOk={cloudSync.syncStatus === "ok" && !!cloudSync.lastSync}>
+          <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.8 }}>
+            Saves all your API keys and settings to a private GitHub Gist.
+            Open Jarvis on any device — it auto-pulls your config on first load.<br/><br/>
+            <span style={{ color:C.textBright, fontWeight:600 }}>One-time setup:</span><br/>
+            1. Go to <span style={{ color:C.cyan }}>gist.github.com</span> → New gist → set filename to{" "}
+            <span style={{ color:C.cyan }}>jarvis-config.json</span>, content <span style={{ color:C.cyan }}>{"{}"}</span>, set to <span style={{ color:C.cyan }}>Secret</span><br/>
+            2. Go to <span style={{ color:C.cyan }}>github.com/settings/tokens</span> → Generate classic token with <span style={{ color:C.cyan }}>gist</span> scope<br/>
+            3. In Vercel → your project → Settings → Environment Variables, add:<br/>
+            &nbsp;&nbsp;• <span style={{ color:C.cyan }}>GITHUB_PAT</span> = your token<br/>
+            &nbsp;&nbsp;• <span style={{ color:C.cyan }}>GITHUB_GIST_ID</span> = the ID from the Gist URL (the long hash)
+          </div>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+            <HUDBtn variant="primary" onClick={cloudSync.push} disabled={cloudSync.syncing}>
+              {cloudSync.syncing ? "Syncing…" : "⬆ Push to Cloud"}
+            </HUDBtn>
+            <HUDBtn onClick={() => {
+              if (window.confirm("Pull from cloud? This will overwrite your local settings and reload the page.")) {
+                cloudSync.pull(false);
+              }
+            }} disabled={cloudSync.syncing}>
+              {cloudSync.syncing ? "Loading…" : "⬇ Pull from Cloud"}
+            </HUDBtn>
+          </div>
+          {cloudSync.syncStatus === "error" && (
+            <div style={{ fontSize:11, color:C.red, marginTop:10 }}>
+              ⚠ Could not reach sync endpoint. Make sure GITHUB_PAT and GITHUB_GIST_ID are set in Vercel and the project has been redeployed.
+            </div>
+          )}
+        </IntCard>
+      )}
 
       {/* ── AI CORE ── */}
       <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, fontWeight:600 }}>AI CORE</div>
@@ -2164,11 +2297,12 @@ export default function Jarvis() {
   const [sceneLoading,  setSceneLoading] = useState(null);
   const [notification,  setNotification] = useState(null);
 
-  const spotify  = useSpotify();
-  const calendar = useCalendar();
-  const weather  = useWeather();
-  const webhooks = useWebhooks();
-  const crypto   = useCrypto();
+  const spotify    = useSpotify();
+  const calendar   = useCalendar();
+  const weather    = useWeather();
+  const webhooks   = useWebhooks();
+  const crypto     = useCrypto();
+  const cloudSync  = useCloudSync();
 
   const notify = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
@@ -2378,7 +2512,7 @@ export default function Jarvis() {
         {tab==="recipes"       && <RecipesTab />}
         {tab==="body"          && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
         {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
-        {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
+        {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} cloudSync={cloudSync} />}
       </div>
 
       {/* Floating orb */}
