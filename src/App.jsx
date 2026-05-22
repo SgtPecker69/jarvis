@@ -363,9 +363,15 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
   const [memories,      setMemories]     = useLocalStorage("jarvis_memories", []);
   const [memoryFile,    setMemoryFile]   = useLocalStorage("jarvis_memory_file", "");
   const [memoryUpdated, setMemoryUpdated]= useLocalStorage("jarvis_memory_updated", null);
-  const updatingMemory = useRef(false);
-  const recogRef  = useRef(null);
-  const audioRef  = useRef(null);
+  const [continuousMode, setContinuousMode] = useLocalStorage("jarvis_continuous_mode", false);
+  const updatingMemory    = useRef(false);
+  const recogRef          = useRef(null);
+  const audioRef          = useRef(null);
+  const continuousModeRef = useRef(false);
+  const startListeningRef = useRef(null);
+
+  // Keep ref in sync with state so speak() callbacks see the latest value
+  useEffect(() => { continuousModeRef.current = continuousMode; }, [continuousMode]);
 
   const clearHistory  = useCallback(() => setChatHistory([]), []);
   const clearMemories = useCallback(() => { setMemories([]); setMemoryFile(""); setMemoryUpdated(null); }, []);
@@ -394,8 +400,14 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
         const blob = await res.blob();
         const audio = new Audio(URL.createObjectURL(blob));
         audioRef.current = audio;
-        audio.onended = () => { setSpeaking(false); audioRef.current = null; };
-        audio.onerror = () => { setSpeaking(false); audioRef.current = null; };
+        audio.onended = () => {
+          setSpeaking(false); audioRef.current = null;
+          if (continuousModeRef.current) setTimeout(() => startListeningRef.current?.(), 700);
+        };
+        audio.onerror = () => {
+          setSpeaking(false); audioRef.current = null;
+          if (continuousModeRef.current) setTimeout(() => startListeningRef.current?.(), 700);
+        };
         audio.play();
       } catch (e) {
         setSpeaking(false);
@@ -417,7 +429,10 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
                   voices.find(v => v.lang.startsWith("en")) || null;
     if (voice) u.voice = voice;
     u.onstart = () => setSpeaking(true);
-    u.onend   = () => setSpeaking(false);
+    u.onend   = () => {
+      setSpeaking(false);
+      if (continuousModeRef.current) setTimeout(() => startListeningRef.current?.(), 700);
+    };
     window.speechSynthesis.speak(u);
   };
 
@@ -623,17 +638,26 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
     r.onstart  = () => setListening(true);
     r.onresult = (e) => { setListening(false); processCommand(e.results[0][0].transcript); };
     r.onend    = () => setListening(false);
-    r.onerror  = () => setListening(false);
+    r.onerror  = (ev) => {
+      setListening(false);
+      // In conversation mode restart after a no-speech timeout
+      if (continuousModeRef.current && ev.error === "no-speech") {
+        setTimeout(() => startListeningRef.current?.(), 400);
+      }
+    };
     recogRef.current = r;
     r.start();
   }, [processCommand, speak]);
+
+  // Keep ref current so speak() callbacks can trigger it without stale closure
+  startListeningRef.current = startListening;
 
   const stopListening = useCallback(() => {
     recogRef.current?.stop();
     setListening(false);
   }, []);
 
-  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, groqKey, setGroqKey, elevenKey, setElevenKey, voiceId, setVoiceId, chatHistory, memories, memoryFile, setMemoryFile, memoryUpdated, clearHistory, clearMemories, deleteMemory };
+  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, groqKey, setGroqKey, elevenKey, setElevenKey, voiceId, setVoiceId, chatHistory, memories, memoryFile, setMemoryFile, memoryUpdated, clearHistory, clearMemories, deleteMemory, continuousMode, setContinuousMode };
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
@@ -884,7 +908,8 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
   };
 
   const stateColor = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[voiceState];
-  const stateLabel = { idle:"TAP TO SPEAK", listening:"LISTENING", thinking:"PROCESSING", speaking:"RESPONDING" }[voiceState];
+  const idleLabel  = jarvis.continuousMode ? "LISTENING CONTINUOUSLY" : "TAP TO SPEAK";
+  const stateLabel = { idle:idleLabel, listening:"LISTENING", thinking:"PROCESSING", speaking:"RESPONDING" }[voiceState];
 
   return (
     <>
@@ -924,7 +949,15 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
 
         {/* Arc Reactor — the hero */}
         <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
-          <button onClick={jarvis.listening ? jarvis.stopListening : jarvis.startListening}
+          <button onClick={() => {
+              if (jarvis.continuousMode) {
+                // Tap exits conversation mode entirely
+                jarvis.setContinuousMode(false);
+                jarvis.stopListening();
+              } else {
+                jarvis.listening ? jarvis.stopListening() : jarvis.startListening();
+              }
+            }}
             style={{ background:"none", border:"none", cursor:"pointer", padding:16, borderRadius:"50%",
               transition:"transform 0.2s" }}
             onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
@@ -935,9 +968,42 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
 
         {/* State indicator */}
         <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, letterSpacing:"0.28em",
-          color:stateColor, marginBottom:20, transition:"color 0.5s",
+          color:stateColor, marginBottom:16, transition:"color 0.5s",
           textShadow:`0 0 16px ${stateColor}88` }}>
           {stateLabel}
+        </div>
+
+        {/* Mode toggle — Manual vs Conversation */}
+        <div style={{ display:"inline-flex", borderRadius:10, overflow:"hidden",
+          border:`1px solid ${C.border}`, marginBottom:20, flexShrink:0 }}>
+          {[["manual","MANUAL"],["conversation","CONVERSATION"]].map(([mode, label]) => {
+            const active = (mode === "conversation") === jarvis.continuousMode;
+            const accent = mode === "conversation" ? C.green : C.cyan;
+            return (
+              <button key={mode} onClick={() => {
+                const goConversation = mode === "conversation";
+                jarvis.setContinuousMode(goConversation);
+                // Auto-start listening when switching into conversation mode
+                if (goConversation && !jarvis.listening && !jarvis.thinking && !jarvis.speaking) {
+                  setTimeout(() => jarvis.startListening(), 150);
+                } else if (!goConversation) {
+                  jarvis.stopListening();
+                }
+              }} style={{
+                background: active ? `${accent}1A` : "transparent",
+                border: "none",
+                borderRight: mode === "manual" ? `1px solid ${C.border}` : "none",
+                padding:"7px 18px",
+                fontSize:9, letterSpacing:"0.2em", fontFamily:"'Orbitron',monospace",
+                fontWeight:600, cursor:"pointer",
+                color: active ? accent : C.dimMid,
+                transition:"all 0.2s",
+                boxShadow: active ? `inset 0 0 12px ${accent}18` : "none",
+              }}>
+                {label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Transcript */}
