@@ -221,7 +221,7 @@ function useSpotify() {
       } else if (cmd.startsWith("play:")) {
         // Clean filler words before searching
         const q = cmd.slice(5)
-          .replace(/\s+on\s+spotify\s*$/i, "")
+          .replace(/\s+(?:on|from|in|via)\s+spotify\s*$/i, "")
           .replace(/\s+for\s+me\s*$/i, "")
           .replace(/\s+please\s*$/i, "")
           .replace(/\s+now\s*$/i, "")
@@ -598,10 +598,10 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
       } else if (/^(resume|unpause|continue playing)\b/.test(core) && !/\bplay\s+\w/.test(core)) {
         firedSpotifyCmd = "play";
       } else {
-        const m = core.match(/^play\s+(.+?)(?:\s+(?:on|in)\s+spotify|\s+for me|\s+please|\s+now)?\s*$/);
+        const m = core.match(/^play\s+(.+?)(?:\s+(?:on|from|in|via)\s+spotify|\s+for me|\s+please|\s+now)?\s*$/);
         if (m?.[1]) {
           firedSpotifyCmd = "play:" + m[1]
-            .replace(/\s+on\s+spotify\s*$/i, "")
+            .replace(/\s+(?:on|from|in|via)\s+spotify\s*$/i, "")
             .trim();
         }
       }
