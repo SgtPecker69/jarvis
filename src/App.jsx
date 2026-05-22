@@ -216,9 +216,34 @@ function useSpotify() {
     } catch {}
   };
 
-  const disconnect = () => { setToken(""); setExpiry(0); setNow(null); };
+  const [devices, setDevices] = useState([]);
 
-  return { clientId, setClientId, connected, login, handleCallback, control, disconnect, nowPlaying: now };
+  const fetchDevices = async () => {
+    if (!connected) return;
+    try {
+      const r = await fetch("https://api.spotify.com/v1/me/player/devices", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const d = await r.json();
+      setDevices(d.devices || []);
+    } catch {}
+  };
+
+  const transferPlayback = async (deviceId, play = true) => {
+    if (!connected) return;
+    try {
+      await fetch("https://api.spotify.com/v1/me/player", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ device_ids: [deviceId], play }),
+      });
+      setTimeout(fetchDevices, 1000);
+    } catch {}
+  };
+
+  const disconnect = () => { setToken(""); setExpiry(0); setNow(null); setDevices([]); };
+
+  return { clientId, setClientId, connected, login, handleCallback, control, disconnect, nowPlaying: now, devices, fetchDevices, transferPlayback };
 }
 
 // ─── GOOGLE CALENDAR HOOK ──────────────────────────────────────────────────────
@@ -874,34 +899,120 @@ function StatusDot({ on, label }) {
   );
 }
 
+// Device type icons
+const deviceIcon = (type) => {
+  if (!type) return "🔊";
+  const t = type.toLowerCase();
+  if (t === "computer")      return "💻";
+  if (t === "smartphone")    return "📱";
+  if (t === "speaker")       return "🔊";
+  if (t === "tv")            return "📺";
+  if (t === "game_console")  return "🎮";
+  if (t === "cast_audio")    return "📡";
+  return "🔊";
+};
+
 function NowPlaying({ spotify }) {
+  const [showDevices, setShowDevices] = useState(false);
   const np = spotify.nowPlaying;
   if (!spotify.connected || !np?.item) return null;
-  const paused = !np.is_playing;
-  const track = np.item;
-  const art   = track?.album?.images?.[0]?.url;
+  const paused  = !np.is_playing;
+  const track   = np.item;
+  const art     = track?.album?.images?.[0]?.url;
+  const accent  = paused ? C.dimMid : C.green;
+
+  const handleDeviceClick = () => {
+    spotify.fetchDevices();
+    setShowDevices(v => !v);
+  };
+
   return (
-    <HUDCard style={{ padding:"12px 16px", marginBottom:14, opacity: paused ? 0.75 : 1, transition:"opacity 0.3s" }} accent={paused ? C.dimMid : C.green}>
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        {art && <img src={art} alt="" style={{ width:44, height:44, borderRadius:4, border:`1px solid ${paused ? C.dim : C.green}33`, filter: paused ? "grayscale(40%)" : "none", transition:"filter 0.3s" }} />}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{track?.name}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>
-            {track?.artists?.map(a=>a.name).join(", ")}
-            {paused && <span style={{ marginLeft:8, color:C.dimMid, fontSize:10, letterSpacing:"0.1em" }}>· PAUSED</span>}
+    <div style={{ marginBottom:14, position:"relative" }}>
+      <HUDCard style={{ padding:"12px 16px", marginBottom:0, opacity: paused ? 0.8 : 1, transition:"opacity 0.3s" }} accent={accent}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          {art && <img src={art} alt="" style={{ width:44, height:44, borderRadius:6, border:`1px solid ${accent}33`, filter: paused ? "grayscale(35%)" : "none", transition:"all 0.3s", flexShrink:0 }} />}
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{track?.name}</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2, display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{track?.artists?.map(a=>a.name).join(", ")}</span>
+              {paused && <span style={{ color:C.dimMid, fontSize:10, letterSpacing:"0.1em", flexShrink:0 }}>· PAUSED</span>}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:5, alignItems:"center", flexShrink:0 }}>
+            {[["prev","⏮"],["play","▶"],["next","⏭"]].map(([cmd,icon]) => (
+              <button key={cmd} onClick={() => spotify.control(cmd==="play" ? (np.is_playing?"pause":"play") : cmd)}
+                style={{ background: paused ? "rgba(255,255,255,0.04)" : `${C.green}0F`,
+                  border:`1px solid ${paused ? C.dim+"44" : C.green+"33"}`,
+                  borderRadius:5, padding:"5px 10px", color: paused ? C.dimMid : C.green,
+                  fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
+                {cmd==="play" ? (np.is_playing?"⏸":"▶") : icon}
+              </button>
+            ))}
+            {/* Device picker button */}
+            <button onClick={handleDeviceClick} title="Select playback device"
+              style={{ background: showDevices ? `${C.cyan}15` : "rgba(255,255,255,0.03)",
+                border:`1px solid ${showDevices ? C.cyan+"55" : C.borderDim}`,
+                borderRadius:5, padding:"5px 9px", cursor:"pointer",
+                color: showDevices ? C.cyan : C.dimMid, fontSize:13,
+                transition:"all 0.2s", lineHeight:1 }}>
+              {/* Speaker/cast SVG icon */}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </button>
           </div>
         </div>
-        <div style={{ display:"flex", gap:6 }}>
-          {[["prev","⏮"],["play","▶"],["next","⏭"]].map(([cmd,icon]) => (
-            <button key={cmd} onClick={() => spotify.control(cmd==="play"? (np.is_playing?"pause":"play") : cmd)}
-              style={{ background: paused ? "rgba(255,255,255,0.04)" : "rgba(0,255,153,0.06)", border:`1px solid ${paused ? C.dim+"44" : C.green+"33"}`, borderRadius:4,
-                padding:"5px 10px", color: paused ? C.dimMid : C.green, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
-              {cmd==="play" ? (np.is_playing?"⏸":"▶") : icon}
-            </button>
-          ))}
+      </HUDCard>
+
+      {/* Device picker dropdown */}
+      {showDevices && (
+        <div className="fade-in-up" style={{
+          position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:200,
+          background:"rgba(0,8,24,0.97)", backdropFilter:"blur(20px)",
+          WebkitBackdropFilter:"blur(20px)",
+          border:`1px solid ${C.cyan}33`, borderRadius:12,
+          padding:"10px 0", minWidth:240,
+          boxShadow:`0 16px 48px rgba(0,0,0,0.7), 0 0 24px ${C.cyan}11`,
+        }}>
+          <div style={{ fontSize:8, letterSpacing:"0.22em", color:C.dim, padding:"0 14px 8px",
+            textTransform:"uppercase", fontWeight:700, borderBottom:`1px solid ${C.borderDim}` }}>
+            Connect to a Device
+          </div>
+          {spotify.devices.length === 0
+            ? <div style={{ padding:"14px 16px", fontSize:12, color:C.dimMid }}>No devices found. Open Spotify on a device.</div>
+            : spotify.devices.map(d => {
+                const isActive = d.is_active;
+                return (
+                  <button key={d.id} onClick={() => { spotify.transferPlayback(d.id, !paused); setShowDevices(false); }}
+                    style={{ width:"100%", background: isActive ? `${C.green}0C` : "transparent",
+                      border:"none", borderBottom:`1px solid ${C.borderDim}`, padding:"11px 16px",
+                      display:"flex", alignItems:"center", gap:10, cursor:"pointer",
+                      transition:"background 0.15s", textAlign:"left" }}
+                    onMouseEnter={e=>e.currentTarget.style.background=isActive?`${C.green}18`:`${C.cyan}08`}
+                    onMouseLeave={e=>e.currentTarget.style.background=isActive?`${C.green}0C`:"transparent"}>
+                    <span style={{ fontSize:18, lineHeight:1 }}>{deviceIcon(d.type)}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:600, color: isActive ? C.green : C.text,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.name}</div>
+                      <div style={{ fontSize:10, color:C.dimMid, marginTop:1, letterSpacing:"0.06em" }}>
+                        {d.type?.replace("_"," ")} {d.volume_percent != null ? `· ${d.volume_percent}%` : ""}
+                      </div>
+                    </div>
+                    {isActive && (
+                      <span style={{ fontSize:9, color:C.green, letterSpacing:"0.12em",
+                        background:`${C.green}15`, padding:"2px 7px", borderRadius:4, flexShrink:0 }}>
+                        ACTIVE
+                      </span>
+                    )}
+                  </button>
+                );
+              })
+          }
         </div>
-      </div>
-    </HUDCard>
+      )}
+    </div>
   );
 }
 
