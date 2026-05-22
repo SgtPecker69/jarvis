@@ -856,22 +856,26 @@ function StatusDot({ on, label }) {
 
 function NowPlaying({ spotify }) {
   const np = spotify.nowPlaying;
-  if (!spotify.connected || !np?.is_playing) return null;
+  if (!spotify.connected || !np?.item) return null;
+  const paused = !np.is_playing;
   const track = np.item;
   const art   = track?.album?.images?.[0]?.url;
   return (
-    <HUDCard style={{ padding:"12px 16px", marginBottom:14 }} accent={C.green}>
+    <HUDCard style={{ padding:"12px 16px", marginBottom:14, opacity: paused ? 0.75 : 1, transition:"opacity 0.3s" }} accent={paused ? C.dimMid : C.green}>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        {art && <img src={art} alt="" style={{ width:44, height:44, borderRadius:4, border:`1px solid ${C.green}33` }} />}
+        {art && <img src={art} alt="" style={{ width:44, height:44, borderRadius:4, border:`1px solid ${paused ? C.dim : C.green}33`, filter: paused ? "grayscale(40%)" : "none", transition:"filter 0.3s" }} />}
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{track?.name}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{track?.artists?.map(a=>a.name).join(", ")}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>
+            {track?.artists?.map(a=>a.name).join(", ")}
+            {paused && <span style={{ marginLeft:8, color:C.dimMid, fontSize:10, letterSpacing:"0.1em" }}>· PAUSED</span>}
+          </div>
         </div>
         <div style={{ display:"flex", gap:6 }}>
           {[["prev","⏮"],["play","▶"],["next","⏭"]].map(([cmd,icon]) => (
             <button key={cmd} onClick={() => spotify.control(cmd==="play"? (np.is_playing?"pause":"play") : cmd)}
-              style={{ background:"rgba(0,255,153,0.06)", border:`1px solid ${C.green}33`, borderRadius:4,
-                padding:"5px 10px", color:C.green, fontSize:13, cursor:"pointer" }}>
+              style={{ background: paused ? "rgba(255,255,255,0.04)" : "rgba(0,255,153,0.06)", border:`1px solid ${paused ? C.dim+"44" : C.green+"33"}`, borderRadius:4,
+                padding:"5px 10px", color: paused ? C.dimMid : C.green, fontSize:13, cursor:"pointer", transition:"all 0.2s" }}>
               {cmd==="play" ? (np.is_playing?"⏸":"▶") : icon}
             </button>
           ))}
