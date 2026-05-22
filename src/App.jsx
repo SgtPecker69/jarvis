@@ -376,7 +376,7 @@ function useSpotify() {
 
   const disconnect = () => { setToken(""); setExpiry(0); setNow(null); setDevices([]); };
 
-  return { clientId, setClientId, connected, login, handleCallback, control, disconnect, nowPlaying: now, devices, fetchDevices, transferPlayback };
+  return { clientId, setClientId, connected, expiry, login, handleCallback, control, disconnect, nowPlaying: now, devices, fetchDevices, transferPlayback };
 }
 
 // ─── GOOGLE CALENDAR HOOK ──────────────────────────────────────────────────────
@@ -442,16 +442,18 @@ function useCalendar() {
 
   const disconnect = () => { setToken(""); setExpiry(0); setEvents([]); };
 
-  return { clientId, setClientId, connected, login, handleCallback, disconnect, events, fetchEvents };
+  return { clientId, setClientId, connected, expiry, login, handleCallback, disconnect, events, fetchEvents };
 }
 
 // ─── WEATHER HOOK ──────────────────────────────────────────────────────────────
 function useWeather() {
   const [data, setData] = useState(null);
   const [city, setCity] = useState("");
+  const [denied, setDenied] = useState(false);
 
-  useEffect(() => {
+  const fetch_ = useCallback(() => {
     if (!navigator.geolocation) return;
+    setDenied(false);
     navigator.geolocation.getCurrentPosition(async ({ coords: { latitude: lat, longitude: lon } }) => {
       try {
         const [wr, gr] = await Promise.all([
@@ -463,10 +465,12 @@ function useWeather() {
         setData(wd.current);
         setCity(gd.address?.city || gd.address?.town || gd.address?.village || "");
       } catch {}
-    }, () => {});
+    }, () => setDenied(true));
   }, []);
 
-  return { data, city };
+  useEffect(() => { fetch_(); }, []);
+
+  return { data, city, denied, retry: fetch_ };
 }
 
 // ─── WEBHOOKS HOOK ────────────────────────────────────────────────────────────
@@ -714,7 +718,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system, messages: [...recentHistory, { role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 600, system, messages: [...recentHistory, { role:"user", content:text }] })
       });
       return r.json();
     };
@@ -762,17 +766,30 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           speak("I can't reach my processing core. Add your API key in Integrations."); setThinking(false); return;
         }
       }
-      const isOverloaded = data?.error?.type === "overloaded_error" || data?.error?.message?.toLowerCase().includes("overloaded");
-      if (isOverloaded) {
-        // Instant fallback to Groq if available
+      const isOverloaded  = data?.error?.type === "overloaded_error" || data?.error?.message?.toLowerCase().includes("overloaded");
+      const isAuthError   = data?.error?.type === "authentication_error" || data?.error?.type === "permission_error" || data?.error?.message?.toLowerCase().includes("invalid x-api-key") || data?.error?.message?.toLowerCase().includes("invalid api key");
+      if (isOverloaded || isAuthError) {
+        // Instant fallback to Groq for either overload or bad key
         if (groqKey) { try { data = await tryGroq(); break; } catch {} }
+        if (isAuthError) {
+          speak("Authentication failed. Check your Anthropic API key in Integrations, or add a Groq key as a fallback."); setThinking(false); return;
+        }
         if (attempt < maxAttempts - 1) { await sleepMs(1000 * (attempt + 1)); continue; }
         speak("Systems are overloaded. Add a Groq key in Integrations for instant fallback."); setThinking(false); return;
       }
       break;
     }
 
-    if (data?.error) { speak("I encountered an issue: " + (data.error.message || "unknown error.")); setThinking(false); return; }
+    if (data?.error) {
+      // Catch-all for any remaining error — avoid speaking raw API messages aloud
+      const msg = data.error.message || "";
+      if (msg.toLowerCase().includes("key") || msg.toLowerCase().includes("auth") || msg.toLowerCase().includes("credential")) {
+        speak("There's an API authentication issue. Check your key in Integrations.");
+      } else {
+        speak("I ran into a technical issue. Try again in a moment.");
+      }
+      setThinking(false); return;
+    }
 
     let txt = data?.content?.[0]?.text || "";
 
@@ -824,7 +841,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
             const r = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
               headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
-              body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system: "You maintain JARVIS's memory file about Mark. Return only the updated profile text.", messages: [{ role: "user", content: memPrompt }] })
+              body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 600, system: "You maintain JARVIS's memory file about Mark. Return only the updated profile text.", messages: [{ role: "user", content: memPrompt }] })
             });
             const d = await r.json();
             result = d?.content?.[0]?.text;
@@ -1353,10 +1370,10 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
         </form>
 
         {!jarvis.apiKey && (
-          <div style={{ fontSize:11, color:C.orange, marginTop:16,
-            padding:"8px 16px", background:"rgba(255,128,0,0.08)",
-            border:`1px solid ${C.orange}33`, borderRadius:8, display:"inline-block", letterSpacing:"0.04em" }}>
-            ⚠ Add your Anthropic API key in Integrations to activate
+          <div style={{ fontSize:11, color:C.dimMid, marginTop:16,
+            padding:"8px 16px", background:"rgba(255,255,255,0.03)",
+            border:`1px solid rgba(255,255,255,0.08)`, borderRadius:8, display:"inline-block", letterSpacing:"0.04em" }}>
+            No local API key — using server key if configured. Add yours in Integrations → Claude AI Brain.
           </div>
         )}
       </div>
@@ -1387,7 +1404,10 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
                 <div style={{ fontSize:26, fontWeight:700, color:C.text }}>{wxEmoji(weather.data.weather_code)} {Math.round(weather.data.temperature_2m)}°F</div>
                 <div style={{ fontSize:11, color:C.dim, marginTop:3 }}>{wxDesc(weather.data.weather_code)}{weather.city ? " · "+weather.city : ""} · {weather.data.relative_humidity_2m}% RH</div>
               </>
-            : <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>Allow location access for weather data</div>
+            : <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>
+                {weather.denied ? "Location denied." : "Allow location access for weather."}
+                <button onClick={weather.retry} style={{ background:"none", border:"none", color:C.cyan, cursor:"pointer", fontSize:11, marginLeft:6, padding:0 }}>Retry</button>
+              </div>
           }
         </HUDCard>
       </div>
@@ -1596,8 +1616,12 @@ function EnvironmentTab({ hue, setHue, coffeeOn, setCoffeeOn, sceneLoading, appl
           </div>
         ) : (
           <div>
-            <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.5 }}>
+            <div style={{ fontSize:12, color:C.dim, marginBottom:10, lineHeight:1.5 }}>
               Find your bridge IP at <span style={{ color:C.cyan }}>discovery.meethue.com</span> and generate a username via the Hue app developer tools.
+            </div>
+            <div style={{ fontSize:11, color:C.orange, marginBottom:14, padding:"8px 12px",
+              background:"rgba(255,128,0,0.07)", border:`1px solid ${C.orange}33`, borderRadius:6, lineHeight:1.5 }}>
+              ⚠ <strong>Local network only.</strong> Hue works when accessing Jarvis from your home network (or running it locally with <code>npm run dev</code>). Browser security blocks local device requests from the public Vercel URL.
             </div>
             <HUDInput label="Bridge IP" placeholder="192.168.x.x" value={hueInp.ip}
               onChange={e=>setHueInp({...hueInp, ip:e.target.value})} />
@@ -2051,15 +2075,22 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
         {calendar.connected
           ? <HUDBtn variant="danger" onClick={calendar.disconnect}>Disconnect</HUDBtn>
           : <HUDBtn variant="primary" onClick={calendar.login} disabled={!calendar.clientId}>Connect Calendar</HUDBtn>}
-        <div style={{ fontSize:11, color:C.dim, marginTop:8 }}>Token expires in 1hr — reconnect as needed.</div>
+        <div style={{ fontSize:11, color: calendar.connected && calendar.expiry && (calendar.expiry - Date.now() < 10*60*1000) ? C.orange : C.dim, marginTop:8 }}>
+          {calendar.connected && calendar.expiry
+            ? (() => { const mins = Math.max(0, Math.round((calendar.expiry - Date.now()) / 60000)); return mins < 2 ? "⚠ Token expired — reconnect now" : mins < 60 ? `⚠ Token expires in ${mins} min — reconnect soon` : "Token expires in ~1hr — reconnect as needed."; })()
+            : "Token expires in 1hr — reconnect as needed."}
+        </div>
       </IntCard>
 
       <IntCard id="hue" icon="💡" title="Philips Hue"
-        status="Configure in Home tab"
+        status="Configure in Home tab — local network only"
         statusOk={false}>
         <div style={{ fontSize:12, color:C.dim, lineHeight:1.6 }}>
           Hue Bridge setup is in the <span style={{ color:C.cyan }}>Home</span> tab → scroll to Bridge Setup.
           Control lights by voice: <em>"Set lights to focus"</em>, <em>"Wind down mode"</em>, etc.
+        </div>
+        <div style={{ fontSize:11, color:C.orange, marginTop:10, lineHeight:1.5 }}>
+          ⚠ Browser security blocks HTTP requests to local IPs from an HTTPS page. Hue only works when accessing Jarvis from your home network or running it locally.
         </div>
       </IntCard>
 
@@ -2235,7 +2266,7 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Conversation History</div>
-            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{Math.floor(jarvis.chatHistory.length / 2)} exchanges stored · last 10 sent with every command</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{Math.floor(jarvis.chatHistory.length / 2)} exchanges stored · last 20 sent with every command</div>
           </div>
           {jarvis.chatHistory.length > 0 && <HUDBtn variant="danger" onClick={jarvis.clearHistory}>Clear</HUDBtn>}
         </div>
@@ -2246,7 +2277,7 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
       <HUDCard>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
-            ["AI Model",    "Claude Haiku 4.5"],
+            ["AI Model",    "Claude Haiku 3.5"],
             ["AI Fallback", jarvis.groqKey ? "Groq Llama ●" : "None ○"],
             ["Voice STT",   "Web Speech API"],
             ["Voice TTS",   jarvis.elevenKey ? "ElevenLabs ●" : "Browser TTS ○"],
@@ -2314,6 +2345,7 @@ export default function Jarvis() {
   const webhooks   = useWebhooks();
   const crypto     = useCrypto();
   const cloudSync  = useCloudSync();
+  const speakRef   = useRef(null); // always-current speak fn for handlers defined before jarvis
 
   const notify = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
@@ -2387,7 +2419,7 @@ export default function Jarvis() {
           timestamp: new Date().toISOString(),
           context: { macros, coffeeOn },
         });
-        if (result?.message) jarvis?.speak(result.message);
+        if (result?.message) speakRef.current?.(result.message);
         else notify("Webhook triggered", "success");
         break;
       }
@@ -2395,6 +2427,7 @@ export default function Jarvis() {
   }, [applyScene, spotify, setMacros, setCoffeeOn, webhooks, macros, coffeeOn]);
 
   const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction:handleAction });
+  speakRef.current = jarvis.speak; // keep ref fresh every render
 
   const TABS = [
     ["briefing",      "Briefing"      ],
@@ -2474,8 +2507,8 @@ export default function Jarvis() {
                 {training ? "⚡ TRAINING DAY" : isRestDay() ? "◐ REST DAY" : "● ACTIVE DAY"}
               </div>
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-                <StatusDot on={spotify.connected}  label="Spotify"  />
-                <StatusDot on={calendar.connected} label="Cal"      />
+                <StatusDot on={spotify.connected}  label={spotify.connected && spotify.expiry && (spotify.expiry - Date.now() < 10*60*1000) ? "Spotify ⚠" : "Spotify"}  />
+                <StatusDot on={calendar.connected} label={calendar.connected && calendar.expiry && (calendar.expiry - Date.now() < 10*60*1000) ? "Cal ⚠" : "Cal"}      />
                 <StatusDot on={hue.connected}      label="Hue"      />
               </div>
             </div>
