@@ -38,19 +38,24 @@ const TARGET_PROTEIN = 170;
 
 // ─── COLOR SYSTEM ──────────────────────────────────────────────────────────────
 const C = {
-  bg:        "#000814",
-  panel:     "rgba(0, 18, 42, 0.92)",
-  border:    "rgba(0, 212, 255, 0.18)",
-  borderDim: "rgba(0, 212, 255, 0.07)",
-  cyan:      "#00d4ff",
-  blue:      "#0096ff",
-  text:      "#c8e8ff",
-  dim:       "#3d6275",
-  green:     "#00ff99",
-  orange:    "#ff8c00",
-  red:       "#ff2255",
-  yellow:    "#ffd600",
-  purple:    "#8b5cf6",
+  bg:         "#00060F",
+  panel:      "rgba(0, 10, 26, 0.72)",
+  panelSolid: "rgba(0, 10, 26, 0.96)",
+  border:     "rgba(0, 200, 255, 0.13)",
+  borderHi:   "rgba(0, 200, 255, 0.45)",
+  borderDim:  "rgba(0, 200, 255, 0.05)",
+  cyan:       "#00C8FF",
+  cyanBright: "#40DFFF",
+  blue:       "#0070E0",
+  text:       "#C4E4FF",
+  textBright: "#E8F6FF",
+  dim:        "#2C5870",
+  dimMid:     "#4A7D9A",
+  green:      "#00FF88",
+  orange:     "#FF8000",
+  red:        "#FF1244",
+  yellow:     "#FFD600",
+  purple:     "#8855FF",
 };
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────────
@@ -632,121 +637,179 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
-function HUDCard({ title, children, accent = C.cyan, style = {}, className = "" }) {
-  const b = (t, r, bo, l) => ({
-    position:"absolute", width:10, height:10, borderColor:accent, borderStyle:"solid", borderWidth:0,
-    ...(t  !== undefined && { top:-1,    borderTopWidth:2    }),
-    ...(bo !== undefined && { bottom:-1, borderBottomWidth:2 }),
-    ...(l  !== undefined && { left:-1,   borderLeftWidth:2   }),
-    ...(r  !== undefined && { right:-1,  borderRightWidth:2  }),
-    opacity: 0.75,
-  });
+function HUDCard({ title, children, accent = C.cyan, style = {}, className = "", glow = false }) {
+  const corner = (pos) => {
+    const sz = 20, s = { position:"absolute", width:sz, height:sz, pointerEvents:"none" };
+    const b2 = `2px solid ${accent}`;
+    if (pos==="tl") return {...s, top:-1, left:-1, borderTop:b2, borderLeft:b2, borderRadius:"13px 0 0 0"};
+    if (pos==="tr") return {...s, top:-1, right:-1, borderTop:b2, borderRight:b2, borderRadius:"0 13px 0 0"};
+    if (pos==="bl") return {...s, bottom:-1, left:-1, borderBottom:b2, borderLeft:b2, borderRadius:"0 0 0 13px"};
+    return {...s, bottom:-1, right:-1, borderBottom:b2, borderRight:b2, borderRadius:"0 0 13px 0"};
+  };
   return (
-    <div className={`fade-in ${className}`} style={{ position:"relative", background:C.panel, border:`1px solid ${accent}18`, borderRadius:3, padding:"16px 20px", marginBottom:14, ...style }}>
-      <div style={b(0,undefined,undefined,0)} />
-      <div style={b(0,0,undefined,undefined)} />
-      <div style={b(undefined,undefined,0,0)} />
-      <div style={b(undefined,0,0,undefined)} />
-      {title && <div style={{ fontSize:10, letterSpacing:"0.15em", textTransform:"uppercase", color:accent, marginBottom:14, fontWeight:700, opacity:0.9 }}>◆ {title}</div>}
+    <div className={`hud-card fade-in-up ${className}`} style={{
+      position:"relative",
+      background:"rgba(0,10,26,0.7)",
+      backdropFilter:"blur(24px) saturate(160%)",
+      WebkitBackdropFilter:"blur(24px) saturate(160%)",
+      border:`1px solid ${accent}18`,
+      borderRadius:14,
+      padding:"18px 20px",
+      marginBottom:14,
+      boxShadow:`0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)`,
+      ...style,
+    }}>
+      {["tl","tr","bl","br"].map(p => <div key={p} style={corner(p)} />)}
+      {glow && <div style={{ position:"absolute", inset:0, borderRadius:14, background:`radial-gradient(ellipse at 50% 0%, ${accent}0A 0%, transparent 65%)`, pointerEvents:"none" }} />}
+      {title && (
+        <div style={{ fontSize:9, letterSpacing:"0.22em", textTransform:"uppercase", color:accent, marginBottom:14, fontWeight:700, display:"flex", alignItems:"center", gap:7 }}>
+          <span style={{ width:4, height:4, borderRadius:"50%", background:accent, boxShadow:`0 0 8px ${accent}`, flexShrink:0, display:"inline-block" }} />
+          {title}
+        </div>
+      )}
       {children}
     </div>
   );
 }
 
-function GlowBar({ pct, color = C.cyan, height = 3 }) {
+function GlowBar({ pct, color = C.cyan, height = 4 }) {
   return (
-    <div style={{ width:"100%", height, background:"rgba(255,255,255,0.05)", borderRadius:2, overflow:"hidden", marginTop:8 }}>
+    <div style={{ width:"100%", height, background:"rgba(255,255,255,0.04)", borderRadius:height, overflow:"hidden", marginTop:10, position:"relative" }}>
       <div className="progress-bar-fill" style={{
         width:`${Math.min(100, pct || 0)}%`, height:"100%",
-        background:`linear-gradient(90deg, ${color}77, ${color})`,
-        borderRadius:2, boxShadow:`0 0 6px ${color}88`, transition:"width 1s ease"
-      }} />
+        background:`linear-gradient(90deg, ${color}55, ${color}CC, ${color})`,
+        borderRadius:height,
+        boxShadow:`0 0 10px ${color}88, 0 0 20px ${color}33`,
+        transition:"width 1.2s cubic-bezier(0.4,0,0.2,1)",
+        position:"relative",
+      }}>
+        <div style={{ position:"absolute", right:0, top:"50%", transform:"translateY(-50%)", width:3, height:"140%", background:color, borderRadius:2, boxShadow:`0 0 8px ${color}` }} />
+      </div>
     </div>
   );
 }
 
 function Metric({ label, value, unit, sub, color = C.text, pct, barColor }) {
   return (
-    <div style={{ background:"rgba(0,212,255,0.02)", border:`1px solid ${C.borderDim}`, borderRadius:4, padding:"12px 14px" }}>
-      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.dim, marginBottom:5, textTransform:"uppercase" }}>{label}</div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:3 }}>
-        <span style={{ fontSize:22, fontWeight:700, color, letterSpacing:"-0.02em", fontVariantNumeric:"tabular-nums" }}>{value}</span>
-        {unit && <span style={{ fontSize:11, color:C.dim }}>{unit}</span>}
+    <div style={{
+      background:"rgba(0,200,255,0.03)",
+      border:`1px solid ${C.borderDim}`,
+      borderRadius:10, padding:"14px 16px",
+      position:"relative", overflow:"hidden",
+    }}>
+      <div style={{ position:"absolute", top:0, left:0, right:0, height:1, background:`linear-gradient(90deg, transparent, ${color}22, transparent)` }} />
+      <div style={{ fontSize:9, letterSpacing:"0.18em", color:C.dimMid, marginBottom:6, textTransform:"uppercase", fontWeight:600 }}>{label}</div>
+      <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
+        <span className="data-num" style={{ fontSize:26, fontWeight:700, color, lineHeight:1 }}>{value}</span>
+        {unit && <span style={{ fontSize:11, color:C.dimMid, marginBottom:2 }}>{unit}</span>}
       </div>
-      {sub && <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize:11, color:C.dimMid, marginTop:4 }}>{sub}</div>}
       {pct !== undefined && <GlowBar pct={pct} color={barColor || color} />}
     </div>
   );
 }
 
 function ArcReactor({ size = 60, state = "idle" }) {
-  const col = { idle:"#00d4ff", listening:"#ff2255", thinking:"#ffd600", speaking:"#00ff99" }[state] || C.cyan;
-  const spin    = state === "thinking";
-  const pulseR  = state === "idle" || state === "speaking";
-  const pulseC  = state === "idle" || state === "speaking";
-  const isListen= state === "listening";
+  const palette = {
+    idle:      { col:"#00C8FF", sec:"#0055CC" },
+    listening: { col:"#FF1244", sec:"#FF5500" },
+    thinking:  { col:"#FFD600", sec:"#FF8800" },
+    speaking:  { col:"#00FF88", sec:"#00AA55" },
+  };
+  const { col, sec } = palette[state] || palette.idle;
+  const thinking  = state === "thinking";
+  const listening = state === "listening";
+  const r = (n) => Math.round(size * n);
+
   return (
-    <div style={{ width:size, height:size, position:"relative" }}>
-      {isListen && [1,2,3].map(i => (
+    <div style={{ width:size, height:size, position:"relative", flexShrink:0 }}>
+      {/* Ambient background glow */}
+      <div className="ambient-pulse" style={{
+        position:"absolute", inset:-r(0.5),
+        background:`radial-gradient(circle, ${col}14 0%, transparent 70%)`,
+        borderRadius:"50%", pointerEvents:"none",
+      }} />
+
+      {/* Listening ripples */}
+      {listening && [0,1,2].map(i => (
         <div key={i} style={{
-          position:"absolute", inset: -i*14,
-          border:`1px solid ${col}`, borderRadius:"50%",
-          animation:`ripple ${0.9+i*0.35}s ease-out infinite`,
-          animationDelay:`${i*0.18}s`, opacity:0.4, pointerEvents:"none"
+          position:"absolute", inset:-r(0.15) - i*r(0.18),
+          border:`1px solid ${col}88`, borderRadius:"50%",
+          animation:`ripple-out ${1.4 + i*0.45}s ease-out infinite`,
+          animationDelay:`${i*0.38}s`, pointerEvents:"none",
         }} />
       ))}
-      <div className={spin ? "arc-spin" : pulseR ? "arc-pulse-ring" : ""}
-        style={{ position:"absolute", inset:0, border:`2px solid ${col}`, borderRadius:"50%", boxShadow:`0 0 10px ${col}55` }} />
-      <div style={{ position:"absolute", inset:8, border:`1px solid ${col}44`, borderRadius:"50%" }} />
-      <div style={{ position:"absolute", inset:14, border:`1px solid ${col}22`, borderRadius:"50%" }} />
-      <div className={pulseC ? "arc-core-pulse" : ""}
-        style={{
-          position:"absolute", inset:20,
-          background:`radial-gradient(circle, ${col}, ${col}99)`,
-          borderRadius:"50%", boxShadow:`0 0 12px ${col}, 0 0 25px ${col}66`
-        }} />
+
+      {/* Ring 1 — outer, slow CW */}
+      <div className={thinking ? "spin-cw-fast" : "spin-cw-slow"} style={{
+        position:"absolute", inset:0,
+        border:`2px solid ${col}`,
+        borderRadius:"50%",
+        boxShadow:`0 0 ${r(0.18)}px ${col}66, inset 0 0 ${r(0.1)}px ${col}22`,
+      }} />
+
+      {/* Ring 2 — dashed, slow CCW */}
+      <div className={thinking ? "spin-ccw-med" : "spin-ccw-slow"} style={{
+        position:"absolute", inset:r(0.12),
+        border:`1px dashed ${col}77`, borderRadius:"50%",
+      }} />
+
+      {/* Ring 3 — solid medium */}
+      <div className={thinking ? "spin-cw-med" : "spin-cw-slow"} style={{
+        position:"absolute", inset:r(0.24),
+        border:`1px solid ${col}44`, borderRadius:"50%",
+      }} />
+
+      {/* Ring 4 — inner fast CCW */}
+      <div className={thinking ? "spin-ccw-fast" : "spin-ccw-med"} style={{
+        position:"absolute", inset:r(0.36),
+        border:`1px solid ${col}55`, borderRadius:"50%",
+        borderTopColor: col, borderRightColor:"transparent",
+      }} />
+
+      {/* Core */}
+      <div className={state === "speaking" ? "core-breathe-fast" : "core-breathe"} style={{
+        position:"absolute", inset:r(0.44),
+        background:`radial-gradient(circle at 38% 32%, ${col}, ${sec})`,
+        borderRadius:"50%",
+        boxShadow:`0 0 ${r(0.22)}px ${col}, 0 0 ${r(0.45)}px ${col}77, 0 0 ${r(0.7)}px ${col}33`,
+      }} />
     </div>
   );
 }
 
 function HUDBtn({ onClick, children, variant = "default", style = {}, disabled = false }) {
-  const bg = {
-    primary: `linear-gradient(135deg, ${C.cyan}22, ${C.blue}33)`,
-    success: `linear-gradient(135deg, ${C.green}22, ${C.green}11)`,
-    danger:  `linear-gradient(135deg, ${C.red}22, ${C.red}11)`,
-    default: "rgba(255,255,255,0.04)",
-  }[variant];
-  const border = {
-    primary: `1px solid ${C.cyan}55`,
-    success: `1px solid ${C.green}55`,
-    danger:  `1px solid ${C.red}55`,
-    default: `1px solid rgba(255,255,255,0.1)`,
-  }[variant];
-  const color = {
-    primary: C.cyan,
-    success: C.green,
-    danger:  C.red,
-    default: C.text,
-  }[variant];
+  const variants = {
+    primary: { bg:`linear-gradient(135deg, rgba(0,200,255,0.15), rgba(0,112,224,0.2))`, border:`1px solid ${C.cyan}55`, color:C.cyan, shadow:`0 0 20px ${C.cyan}22` },
+    success: { bg:`linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,200,100,0.08))`, border:`1px solid ${C.green}55`, color:C.green, shadow:`0 0 20px ${C.green}22` },
+    danger:  { bg:`linear-gradient(135deg, rgba(255,18,68,0.15), rgba(200,0,50,0.1))`,   border:`1px solid ${C.red}55`,   color:C.red,   shadow:`0 0 20px ${C.red}22`  },
+    default: { bg:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", color:C.text, shadow:"none" },
+  };
+  const v = variants[variant] || variants.default;
   return (
-    <button onClick={onClick} disabled={disabled} style={{
-      background:bg, border, color, borderRadius:4, padding:"9px 16px",
-      fontSize:13, fontWeight:600, cursor:disabled?"not-allowed":"pointer",
-      letterSpacing:"0.04em", transition:"all 0.15s", opacity:disabled?0.5:1,
-      boxShadow:variant!=="default"?`0 0 12px ${color}22`:"none",
-      ...style
+    <button className="hud-btn" onClick={onClick} disabled={disabled} style={{
+      background:v.bg, border:v.border, color:v.color,
+      borderRadius:8, padding:"9px 18px",
+      fontSize:12, fontWeight:600, cursor:disabled?"not-allowed":"pointer",
+      letterSpacing:"0.06em", opacity:disabled?0.4:1,
+      boxShadow:v.shadow, textTransform:"uppercase",
+      ...style,
     }}>{children}</button>
   );
 }
 
 function HUDInput({ label, style = {}, ...props }) {
   return (
-    <div style={{ marginBottom:12, ...style }}>
-      {label && <div style={{ fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase", color:C.dim, marginBottom:5 }}>{label}</div>}
-      <input {...props} style={{
-        width:"100%", background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
-        borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none",
-        fontFamily:"inherit", boxSizing:"border-box"
+    <div style={{ marginBottom:14, ...style }}>
+      {label && <div style={{ fontSize:9, letterSpacing:"0.18em", textTransform:"uppercase", color:C.dimMid, marginBottom:6, fontWeight:600 }}>{label}</div>}
+      <input className="hud-input" {...props} style={{
+        width:"100%",
+        background:"rgba(0,200,255,0.04)",
+        border:`1px solid ${C.border}`,
+        borderRadius:8, padding:"10px 14px",
+        color:C.text, fontSize:13, outline:"none",
+        fontFamily:"inherit", boxSizing:"border-box",
+        transition:"border-color 0.2s, box-shadow 0.2s",
       }} />
     </div>
   );
@@ -754,9 +817,14 @@ function HUDInput({ label, style = {}, ...props }) {
 
 function StatusDot({ on, label }) {
   return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, color: on ? C.green : C.dim }}>
-      <span style={{ width:6, height:6, borderRadius:"50%", background: on ? C.green : C.dim,
-        boxShadow: on ? `0 0 6px ${C.green}` : "none" }} />
+    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:on ? C.green : C.dimMid, fontWeight:500, letterSpacing:"0.04em" }}>
+      <span style={{
+        width:7, height:7, borderRadius:"50%",
+        background:on ? C.green : C.dimMid,
+        boxShadow:on ? `0 0 8px ${C.green}, 0 0 16px ${C.green}55` : "none",
+        flexShrink:0,
+        animation:on ? "ambient-pulse 3s ease-in-out infinite" : "none",
+      }} />
       {label}
     </span>
   );
@@ -815,51 +883,101 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
     setCmd("");
   };
 
+  const stateColor = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[voiceState];
+  const stateLabel = { idle:"TAP TO SPEAK", listening:"LISTENING", thinking:"PROCESSING", speaking:"RESPONDING" }[voiceState];
+
   return (
     <>
-      {/* ── Voice Interface ── */}
-      <HUDCard style={{ textAlign:"center", padding:"28px 20px" }}>
-        <div style={{ fontSize:10, letterSpacing:"0.2em", color:C.dim, marginBottom:16 }}>J.A.R.V.I.S  INTERFACE</div>
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
+      {/* ── Voice Interface — HERO ── */}
+      <div style={{
+        position:"relative", marginBottom:14, overflow:"hidden",
+        background:"rgba(0,8,22,0.75)",
+        backdropFilter:"blur(28px) saturate(180%)",
+        WebkitBackdropFilter:"blur(28px) saturate(180%)",
+        border:`1px solid ${stateColor}22`,
+        borderRadius:20,
+        padding:"32px 24px 28px",
+        boxShadow:`0 0 60px ${stateColor}0D, 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)`,
+        transition:"border-color 0.5s, box-shadow 0.5s",
+        textAlign:"center",
+      }}>
+        {/* Corner brackets */}
+        {[["tl","top","left"],["tr","top","right"],["bl","bottom","left"],["br","bottom","right"]].map(([k,v,h])=>(
+          <div key={k} style={{ position:"absolute", width:24, height:24, [v]:-1, [h]:-1, pointerEvents:"none",
+            [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]:`2px solid ${stateColor}`,
+            [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]:`2px solid ${stateColor}`,
+            borderRadius: k==="tl"?"20px 0 0 0":k==="tr"?"0 20px 0 0":k==="bl"?"0 0 0 20px":"0 0 20px 0",
+            transition:"border-color 0.5s",
+          }} />
+        ))}
+
+        {/* Top ambient glow */}
+        <div style={{ position:"absolute", top:0, left:"20%", right:"20%", height:1,
+          background:`linear-gradient(90deg, transparent, ${stateColor}88, transparent)`,
+          boxShadow:`0 0 16px ${stateColor}66`, transition:"background 0.5s" }} />
+
+        {/* Label */}
+        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:8, letterSpacing:"0.35em",
+          color:stateColor, marginBottom:28, opacity:0.7, transition:"color 0.5s" }}>
+          J · A · R · V · I · S
+        </div>
+
+        {/* Arc Reactor — the hero */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
           <button onClick={jarvis.listening ? jarvis.stopListening : jarvis.startListening}
-            style={{ background:"none", border:"none", cursor:"pointer", padding:12 }}>
-            <ArcReactor size={90} state={voiceState} />
+            style={{ background:"none", border:"none", cursor:"pointer", padding:16, borderRadius:"50%",
+              transition:"transform 0.2s" }}
+            onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
+            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+            <ArcReactor size={110} state={voiceState} />
           </button>
         </div>
 
+        {/* State indicator */}
+        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, letterSpacing:"0.28em",
+          color:stateColor, marginBottom:20, transition:"color 0.5s",
+          textShadow:`0 0 16px ${stateColor}88` }}>
+          {stateLabel}
+        </div>
+
+        {/* Transcript */}
         {jarvis.transcript && (
-          <div className="fade-in-up" style={{ fontSize:13, color:"#ff7799", marginBottom:10, fontStyle:"italic", letterSpacing:"0.01em" }}>
+          <div className="fade-in-up" style={{
+            fontSize:13, color:C.red, marginBottom:12, fontStyle:"italic",
+            opacity:0.9, letterSpacing:"0.02em",
+          }}>
             "{jarvis.transcript}"
           </div>
         )}
+
+        {/* Response */}
         {jarvis.response && (
-          <div className="fade-in-up" style={{ fontSize:14, color:C.text, lineHeight:1.65, marginBottom:14, maxWidth:480, margin:"0 auto 14px" }}>
+          <div className="fade-in-up" style={{
+            fontSize:15, color:C.textBright, lineHeight:1.7, marginBottom:20,
+            maxWidth:520, margin:"0 auto 20px", fontWeight:400,
+          }}>
             {jarvis.response}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display:"flex", gap:8, maxWidth:420, margin:"0 auto" }}>
-          <input value={cmd} onChange={e=>setCmd(e.target.value)}
-            placeholder="Type a command, or tap the reactor to speak..."
-            style={{ flex:1, background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
-              borderRadius:4, padding:"9px 13px", color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" }} />
-          <HUDBtn variant="primary" onClick={handleSubmit} style={{ padding:"9px 14px" }}>Send</HUDBtn>
+        {/* Text input */}
+        <form onSubmit={handleSubmit} style={{ display:"flex", gap:10, maxWidth:460, margin:"0 auto" }}>
+          <input className="hud-input" value={cmd} onChange={e=>setCmd(e.target.value)}
+            placeholder="Type a command…"
+            style={{ flex:1, background:"rgba(0,200,255,0.05)", border:`1px solid ${C.border}`,
+              borderRadius:10, padding:"11px 16px", color:C.text, fontSize:13,
+              outline:"none", fontFamily:"inherit", transition:"border-color 0.2s, box-shadow 0.2s" }} />
+          <HUDBtn variant="primary" onClick={handleSubmit} style={{ padding:"11px 20px", borderRadius:10 }}>Send</HUDBtn>
         </form>
 
-        <div style={{ fontSize:10, letterSpacing:"0.14em", color:C.dim, marginTop:12 }}>
-          {voiceState==="listening"?"● LISTENING — speak now"
-           :voiceState==="thinking"?"◆ PROCESSING..."
-           :voiceState==="speaking"?"▶ RESPONDING"
-           :"TAP REACTOR · TYPE · OR SPEAK A COMMAND"}
-        </div>
-
         {!jarvis.apiKey && (
-          <div style={{ fontSize:11, color:C.orange, marginTop:12, padding:"7px 14px",
-            background:"rgba(255,140,0,0.07)", border:`1px solid ${C.orange}33`, borderRadius:4, display:"inline-block" }}>
-            ⚠ Anthropic API key required — configure in Settings
+          <div style={{ fontSize:11, color:C.orange, marginTop:16,
+            padding:"8px 16px", background:"rgba(255,128,0,0.08)",
+            border:`1px solid ${C.orange}33`, borderRadius:8, display:"inline-block", letterSpacing:"0.04em" }}>
+            ⚠ Add your Anthropic API key in Integrations to activate
           </div>
         )}
-      </HUDCard>
+      </div>
 
       {/* ── Now Playing ── */}
       <NowPlaying spotify={spotify} />
@@ -1736,12 +1854,20 @@ function SettingsTab({ jarvis, spotify, calendar, webhooks }) {
 // ─── FLOATING ORB ─────────────────────────────────────────────────────────────
 function FloatingOrb({ jarvis }) {
   const state = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
+  const col = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[state];
   return (
-    <div style={{ position:"fixed", bottom:20, right:20, zIndex:200 }}>
+    <div style={{ position:"fixed", bottom:24, right:24, zIndex:200 }}>
       <button onClick={jarvis.listening ? jarvis.stopListening : jarvis.startListening}
-        style={{ background:"none", border:"none", cursor:"pointer", padding:0, display:"block" }}
+        style={{
+          background:"rgba(0,8,20,0.85)", backdropFilter:"blur(20px)",
+          border:`1px solid ${col}33`,
+          borderRadius:"50%", width:64, height:64,
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:`0 0 24px ${col}33, 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`,
+          transition:"box-shadow 0.3s, border-color 0.3s",
+        }}
         title="Talk to JARVIS">
-        <ArcReactor size={48} state={state} />
+        <ArcReactor size={44} state={state} />
       </button>
     </div>
   );
@@ -1855,80 +1981,107 @@ export default function Jarvis() {
 
   const training = isTrainingDay();
 
-  return (
-    <div style={{ fontFamily:"'DM Sans','SF Pro Display',system-ui,sans-serif", minHeight:"100vh", background:C.bg, color:C.text }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  const jarvisState = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
 
-      {/* HUD visual effects */}
+  return (
+    <div style={{ fontFamily:"'DM Sans','SF Pro Display',system-ui,sans-serif", minHeight:"100vh", color:C.text, position:"relative",
+      background:`radial-gradient(ellipse 110% 55% at 50% -5%, rgba(0,90,200,0.16) 0%, transparent 65%), radial-gradient(ellipse 70% 50% at 95% 100%, rgba(0,40,100,0.18) 0%, transparent 60%), ${C.bg}` }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+      {/* Layered HUD atmosphere */}
+      <div className="hud-grid" />
       <div className="hud-scanlines" />
       <div className="hud-scan-beam" />
 
-      {/* Toast notification */}
+      {/* Toast */}
       {notification && (
         <div style={{
-          position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)",
-          padding:"10px 20px", borderRadius:6, fontSize:13, fontWeight:600, zIndex:300,
+          position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)",
+          padding:"11px 24px", borderRadius:10, fontSize:12, fontWeight:600, zIndex:300,
           whiteSpace:"nowrap", animation:"notification-in 0.3s ease",
-          background: notification.type==="error" ? "rgba(255,34,85,0.15)" : "rgba(0,255,153,0.1)",
-          border: `1px solid ${notification.type==="error" ? C.red+"55" : C.green+"55"}`,
+          backdropFilter:"blur(20px)",
+          background: notification.type==="error" ? "rgba(255,18,68,0.18)" : "rgba(0,255,136,0.1)",
+          border: `1px solid ${notification.type==="error" ? C.red+"66" : C.green+"55"}`,
           color: notification.type==="error" ? C.red : C.green,
-          boxShadow: `0 0 20px ${notification.type==="error" ? C.red : C.green}22`,
+          boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 20px ${notification.type==="error" ? C.red : C.green}22`,
+          letterSpacing:"0.04em",
         }}>
           {notification.msg}
         </div>
       )}
 
-      {/* Header */}
-      <div style={{ borderBottom:`1px solid ${C.borderDim}`, background:"rgba(0,8,20,0.97)", position:"sticky", top:0, zIndex:100 }}>
-        <div style={{ padding:"12px 20px 0", maxWidth:760, margin:"0 auto" }}>
+      {/* ── HEADER ── */}
+      <div style={{
+        position:"sticky", top:0, zIndex:100,
+        background:"rgba(0,5,15,0.88)",
+        backdropFilter:"blur(28px) saturate(160%)",
+        WebkitBackdropFilter:"blur(28px) saturate(160%)",
+        borderBottom:`1px solid rgba(0,200,255,0.08)`,
+        boxShadow:"0 1px 0 rgba(0,200,255,0.05), 0 8px 32px rgba(0,0,0,0.4)",
+      }}>
+        {/* Subtle top accent line */}
+        <div style={{ height:1, background:`linear-gradient(90deg, transparent 0%, ${C.cyan}55 30%, ${C.cyan}99 50%, ${C.cyan}55 70%, transparent 100%)`, boxShadow:`0 0 12px ${C.cyan}44` }} />
+
+        <div style={{ padding:"10px 20px 0", maxWidth:760, margin:"0 auto" }}>
           {/* Top row */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            {/* Logo + reactor */}
             <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-              <ArcReactor size={36}
-                state={jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle"} />
+              <ArcReactor size={40} state={jarvisState} />
               <div>
-                <div style={{ fontSize:10, letterSpacing:"0.25em", color:C.cyan, fontWeight:700, opacity:0.8 }}>J.A.R.V.I.S</div>
-                <div style={{ fontSize:11, color:C.dim }}>Just A Rather Very Intelligent System</div>
+                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, letterSpacing:"0.3em", color:C.cyan, fontWeight:700,
+                  textShadow:`0 0 20px ${C.cyan}88, 0 0 40px ${C.cyan}44` }}>
+                  J.A.R.V.I.S
+                </div>
+                <div style={{ fontSize:10, color:C.dimMid, letterSpacing:"0.08em", marginTop:1 }}>Just A Rather Very Intelligent System</div>
               </div>
             </div>
+
+            {/* Right status */}
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:11, color: training ? C.orange : C.dim, fontWeight:600 }}>
-                {training ? "⚡ TRAINING DAY" : isRestDay() ? "😴 REST DAY" : "● ACTIVE DAY"}
+              <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:700, fontFamily:"'Orbitron',monospace",
+                color: training ? C.orange : isRestDay() ? C.purple : C.green,
+                textShadow:`0 0 12px currentColor`,
+                marginBottom:6,
+              }}>
+                {training ? "⚡ TRAINING DAY" : isRestDay() ? "◐ REST DAY" : "● ACTIVE DAY"}
               </div>
-              <div style={{ display:"flex", gap:8, marginTop:4, justifyContent:"flex-end" }}>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
                 <StatusDot on={spotify.connected}  label="Spotify"  />
-                <StatusDot on={calendar.connected} label="Calendar" />
+                <StatusDot on={calendar.connected} label="Cal"      />
                 <StatusDot on={hue.connected}      label="Hue"      />
               </div>
             </div>
           </div>
 
-          {/* Macro pills */}
+          {/* Status pills */}
           <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
             {[
-              { label:`${Math.round(TARGET_CAL - macros.cal)} cal left`, color: macros.cal >= TARGET_CAL ? C.orange : C.cyan },
-              { label:`${Math.round(TARGET_PROTEIN - macros.protein)}g protein left`, color: macros.protein >= TARGET_PROTEIN ? C.orange : C.green },
-              weather.data && { label:`${Math.round(weather.data.temperature_2m)}°F ${wxEmoji(weather.data.weather_code)}`, color:C.blue },
-              { label:`${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}`, color:C.dim },
+              { label:`${Math.round(TARGET_CAL - macros.cal)} kcal`, color: macros.cal >= TARGET_CAL ? C.orange : C.cyan },
+              { label:`${Math.round(TARGET_PROTEIN - macros.protein)}g protein`, color: macros.protein >= TARGET_PROTEIN ? C.orange : C.green },
+              weather.data && { label:`${Math.round(weather.data.temperature_2m)}° ${wxEmoji(weather.data.weather_code)}`, color:C.blue },
+              { label: new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}), color:C.dimMid },
             ].filter(Boolean).map((p, i) => (
-              <span key={i} style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-                background:`${p.color}18`, color:p.color, border:`1px solid ${p.color}33` }}>
-                {p.label}
-              </span>
+              <span key={i} style={{
+                padding:"4px 12px", borderRadius:20, fontSize:10, fontWeight:600,
+                background:`${p.color}12`, color:p.color,
+                border:`1px solid ${p.color}30`,
+                letterSpacing:"0.06em",
+                boxShadow:`inset 0 1px 0 ${p.color}15`,
+              }}>{p.label}</span>
             ))}
           </div>
 
-          {/* Tabs */}
+          {/* Tab bar */}
           <div style={{ display:"flex", gap:0, overflowX:"auto", scrollbarWidth:"none" }}>
             {TABS.map(([id, label]) => (
-              <button key={id} onClick={()=>setTab(id)} style={{
-                padding:"10px 15px", fontSize:12, fontWeight: tab===id ? 700 : 500,
-                color: tab===id ? C.cyan : C.dim,
-                borderBottom: tab===id ? `2px solid ${C.cyan}` : "2px solid transparent",
-                background:"none", border:"none", borderBottom: tab===id ? `2px solid ${C.cyan}` : "2px solid transparent",
-                cursor:"pointer", whiteSpace:"nowrap", letterSpacing:"0.04em",
-                transition:"color 0.2s",
-                textShadow: tab===id ? `0 0 8px ${C.cyan}88` : "none",
+              <button key={id} className={`tab-btn${tab===id?" active":""}`} onClick={()=>setTab(id)} style={{
+                padding:"10px 14px", fontSize:11, fontWeight: tab===id ? 700 : 500,
+                color: tab===id ? C.cyan : C.dimMid,
+                background:"none", border:"none",
+                cursor:"pointer", whiteSpace:"nowrap",
+                letterSpacing:"0.1em", textTransform:"uppercase",
+                textShadow: tab===id ? `0 0 12px ${C.cyan}` : "none",
               }}>{label}</button>
             ))}
           </div>
@@ -1936,17 +2089,17 @@ export default function Jarvis() {
       </div>
 
       {/* Content */}
-      <div style={{ padding:"20px 20px 100px", maxWidth:760, margin:"0 auto" }}>
-        {tab==="briefing"    && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} />}
-        {tab==="macros"      && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
-        {tab==="environment" && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
-        {tab==="recipes"     && <RecipesTab />}
-        {tab==="body"        && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
+      <div style={{ padding:"24px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
+        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} />}
+        {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
+        {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
+        {tab==="recipes"       && <RecipesTab />}
+        {tab==="body"          && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
         {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
       </div>
 
-      {/* Floating orb (non-briefing tabs) */}
+      {/* Floating orb */}
       {tab !== "briefing" && <FloatingOrb jarvis={jarvis} />}
     </div>
   );
