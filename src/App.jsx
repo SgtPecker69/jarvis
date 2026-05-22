@@ -221,11 +221,10 @@ function useSpotify() {
       } else if (cmd.startsWith("play:")) {
         // Clean filler words before searching
         const q = cmd.slice(5)
-          .replace(/\s+(?:on|from|in|via)\s+spotify\s*$/i, "")
-          .replace(/\s+for\s+me\s*$/i, "")
-          .replace(/\s+please\s*$/i, "")
-          .replace(/\s+now\s*$/i, "")
-          .trim();
+          .replace(/\b\w+\s+spotify\b/gi, "")   // strip "<preposition> spotify"
+          .replace(/\bspotify\b/gi, "")           // strip bare "spotify"
+          .replace(/\s+(?:for\s+me|please|right\s+now|now)\s*$/i, "")
+          .replace(/\s+/g, " ").trim();
         if (!q) return "No search query";
 
         // Use Spotify field qualifiers for precise matching when "by" is present
@@ -598,12 +597,13 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
       } else if (/^(resume|unpause|continue playing)\b/.test(core) && !/\bplay\s+\w/.test(core)) {
         firedSpotifyCmd = "play";
       } else {
-        const m = core.match(/^play\s+(.+?)(?:\s+(?:on|from|in|via)\s+spotify|\s+for me|\s+please|\s+now)?\s*$/);
-        if (m?.[1]) {
-          firedSpotifyCmd = "play:" + m[1]
-            .replace(/\s+(?:on|from|in|via)\s+spotify\s*$/i, "")
-            .trim();
-        }
+        const stripped = core
+          .replace(/\b\w+\s+spotify\b/gi, "")   // strip "<preposition> spotify"
+          .replace(/\bspotify\b/gi, "")           // strip bare "spotify"
+          .replace(/\s+(?:for me|please|now|right now)\s*$/i, "")
+          .replace(/\s+/g, " ").trim();
+        const m = stripped.match(/^play\s+(.+)$/);
+        if (m?.[1]?.trim()) firedSpotifyCmd = "play:" + m[1].trim();
       }
       if (firedSpotifyCmd) onAction({ type: "spotify", cmd: firedSpotifyCmd });
     }
