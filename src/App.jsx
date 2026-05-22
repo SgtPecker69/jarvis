@@ -1,683 +1,1470 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import "./App.css";
 
+// ─── RECIPE DATA ───────────────────────────────────────────────────────────────
 const RECIPES = [
-  { id: 9, name: "Ground Beef & Baby Bella Bowl", cal: 310, protein: 42, carbs: 11, fat: 10, meal: [1,2,3], tags: ["beef","bowl"], time: 25, cuisine: "American" },
-  { id: 10, name: "Cottage Cheese Pizza", cal: 780, protein: 88, carbs: 38, fat: 28, meal: [4], tags: ["pizza","cheese"], time: 35, cuisine: "Italian" },
-  { id: 11, name: "Shrimp Ceviche", cal: 180, protein: 38, carbs: 10, fat: 1.5, meal: [1,2,3], tags: ["shrimp","fresh"], time: 45, cuisine: "Mexican" },
-  { id: 12, name: "Mediterranean Tuna Salad", cal: 190, protein: 45, carbs: 13, fat: 1.5, meal: [1,2,3], tags: ["tuna","salad"], time: 10, cuisine: "Mediterranean" },
-  { id: 13, name: "Crispy Chicken Cutlets", cal: 630, protein: 94, carbs: 12, fat: 16, meal: [2,3,4], tags: ["chicken","crispy"], time: 20, cuisine: "American" },
-  { id: 14, name: "Taco Bell Crunchwrap Dupe", cal: 568, protein: 84, carbs: 84, fat: 16, meal: [4], tags: ["beef","tacos"], time: 20, cuisine: "Mexican" },
-  { id: 15, name: "McDouble Dupe", cal: 420, protein: 48, carbs: 12, fat: 18, meal: [3,4], tags: ["beef","burger"], time: 15, cuisine: "American" },
-  { id: 16, name: "ShackBurger Dupe", cal: 468, protein: 59.6, carbs: 39.7, fat: 16.2, meal: [3,4], tags: ["beef","burger"], time: 15, cuisine: "American" },
-  { id: 17, name: "Protein Pancakes v2", cal: 465, protein: 57, carbs: 30, fat: 6, meal: [1], tags: ["breakfast","pancakes"], time: 20, cuisine: "American" },
-  { id: 21, name: "Crispy Chicken Nuggets", cal: 500, protein: 74, carbs: 16, fat: 11, meal: [2,3,4], tags: ["chicken","crispy"], time: 20, cuisine: "American" },
-  { id: 22, name: "Sausage Pepper Protein Biscuits", cal: 280, protein: 28, carbs: 22, fat: 8, meal: [1,2], tags: ["breakfast","sausage"], time: 30, cuisine: "American" },
-  { id: 23, name: "Spicy Sesame Beef Udon", cal: 400, protein: 56, carbs: 56, fat: 19, meal: [4], tags: ["beef","noodles","udon"], time: 25, cuisine: "Asian" },
-  { id: 24, name: "Birthday Cake Ninja Creami", cal: 295, protein: 32, carbs: 33, fat: 4, meal: [4,5], tags: ["dessert","creami"], time: 5, cuisine: "American" },
-  { id: 25, name: "Earl Grey Ninja Creami", cal: 270, protein: 30, carbs: 27, fat: 3.5, meal: [4,5], tags: ["dessert","creami"], time: 5, cuisine: "American" },
-  { id: 27, name: "Turkish Potato Omelette", cal: 375, protein: 38, carbs: 28, fat: 9, meal: [1], tags: ["breakfast","eggs"], time: 20, cuisine: "Mediterranean" },
-  { id: 28, name: "Birria Tacos", cal: 530, protein: 54, carbs: 30, fat: 18, meal: [3,4], tags: ["beef","tacos"], time: 60, cuisine: "Mexican" },
-  { id: 29, name: "Bold Chex Mix Dupe", cal: 110, protein: 11, carbs: 14, fat: 5, meal: [2,3], tags: ["snack"], time: 30, cuisine: "American" },
-  { id: 30, name: "Dakgalbi Jeon", cal: 210, protein: 26, carbs: 15, fat: 5, meal: [2,3], tags: ["chicken","korean"], time: 20, cuisine: "Korean" },
-  { id: 31, name: "Bulgogi Smash Tacos", cal: 520, protein: 55, carbs: 25, fat: 16, meal: [3,4], tags: ["beef","tacos","korean"], time: 25, cuisine: "Korean" },
+  { id: 9,  name: "Ground Beef & Baby Bella Bowl",    cal: 310, protein: 42,   carbs: 11,   fat: 10,   meal: [1,2,3], tags: ["beef","bowl"],          time: 25, cuisine: "American"     },
+  { id: 10, name: "Cottage Cheese Pizza",             cal: 780, protein: 88,   carbs: 38,   fat: 28,   meal: [4],     tags: ["pizza","cheese"],       time: 35, cuisine: "Italian"      },
+  { id: 11, name: "Shrimp Ceviche",                   cal: 180, protein: 38,   carbs: 10,   fat: 1.5,  meal: [1,2,3], tags: ["shrimp","fresh"],        time: 45, cuisine: "Mexican"      },
+  { id: 12, name: "Mediterranean Tuna Salad",         cal: 190, protein: 45,   carbs: 13,   fat: 1.5,  meal: [1,2,3], tags: ["tuna","salad"],          time: 10, cuisine: "Mediterranean"},
+  { id: 13, name: "Crispy Chicken Cutlets",           cal: 630, protein: 94,   carbs: 12,   fat: 16,   meal: [2,3,4], tags: ["chicken","crispy"],      time: 20, cuisine: "American"     },
+  { id: 14, name: "Taco Bell Crunchwrap Dupe",        cal: 568, protein: 84,   carbs: 84,   fat: 16,   meal: [4],     tags: ["beef","tacos"],          time: 20, cuisine: "Mexican"      },
+  { id: 15, name: "McDouble Dupe",                    cal: 420, protein: 48,   carbs: 12,   fat: 18,   meal: [3,4],   tags: ["beef","burger"],         time: 15, cuisine: "American"     },
+  { id: 16, name: "ShackBurger Dupe",                 cal: 468, protein: 59.6, carbs: 39.7, fat: 16.2, meal: [3,4],   tags: ["beef","burger"],         time: 15, cuisine: "American"     },
+  { id: 17, name: "Protein Pancakes v2",              cal: 465, protein: 57,   carbs: 30,   fat: 6,    meal: [1],     tags: ["breakfast","pancakes"],  time: 20, cuisine: "American"     },
+  { id: 21, name: "Crispy Chicken Nuggets",           cal: 500, protein: 74,   carbs: 16,   fat: 11,   meal: [2,3,4], tags: ["chicken","crispy"],      time: 20, cuisine: "American"     },
+  { id: 22, name: "Sausage Pepper Protein Biscuits",  cal: 280, protein: 28,   carbs: 22,   fat: 8,    meal: [1,2],   tags: ["breakfast","sausage"],   time: 30, cuisine: "American"     },
+  { id: 23, name: "Spicy Sesame Beef Udon",           cal: 400, protein: 56,   carbs: 56,   fat: 19,   meal: [4],     tags: ["beef","noodles"],        time: 25, cuisine: "Asian"        },
+  { id: 24, name: "Birthday Cake Ninja Creami",       cal: 295, protein: 32,   carbs: 33,   fat: 4,    meal: [4,5],   tags: ["dessert","creami"],      time: 5,  cuisine: "American"     },
+  { id: 25, name: "Earl Grey Ninja Creami",           cal: 270, protein: 30,   carbs: 27,   fat: 3.5,  meal: [4,5],   tags: ["dessert","creami"],      time: 5,  cuisine: "American"     },
+  { id: 27, name: "Turkish Potato Omelette",          cal: 375, protein: 38,   carbs: 28,   fat: 9,    meal: [1],     tags: ["breakfast","eggs"],      time: 20, cuisine: "Mediterranean"},
+  { id: 28, name: "Birria Tacos",                     cal: 530, protein: 54,   carbs: 30,   fat: 18,   meal: [3,4],   tags: ["beef","tacos"],          time: 60, cuisine: "Mexican"      },
+  { id: 29, name: "Bold Chex Mix Dupe",               cal: 110, protein: 11,   carbs: 14,   fat: 5,    meal: [2,3],   tags: ["snack"],                 time: 30, cuisine: "American"     },
+  { id: 30, name: "Dakgalbi Jeon",                    cal: 210, protein: 26,   carbs: 15,   fat: 5,    meal: [2,3],   tags: ["chicken","korean"],      time: 20, cuisine: "Korean"       },
+  { id: 31, name: "Bulgogi Smash Tacos",              cal: 520, protein: 55,   carbs: 25,   fat: 16,   meal: [3,4],   tags: ["beef","tacos","korean"], time: 25, cuisine: "Korean"       },
 ];
-
-const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const FULL_DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
 const LIGHTING_SCENES = [
-  { id: "wake", label: "Wake Up", icon: "☀️", bri: 254, ct: 153, desc: "Cool bright light" },
-  { id: "focus", label: "Focus", icon: "🧠", bri: 220, ct: 200, desc: "Neutral productive" },
-  { id: "training", label: "Training", icon: "⚡", bri: 254, ct: 153, desc: "High energy" },
-  { id: "wind_down", label: "Wind Down", icon: "🌙", bri: 80, ct: 400, desc: "Warm & dim" },
-  { id: "sleep", label: "Sleep", icon: "😴", bri: 10, ct: 500, desc: "Near off, warm" },
-  { id: "meal_prep", label: "Meal Prep", icon: "🍳", bri: 240, ct: 230, desc: "Bright & clear" },
+  { id: "wake",      label: "Wake Up",   icon: "☀️",  bri: 254, ct: 153, desc: "Cool bright"  },
+  { id: "focus",     label: "Focus",     icon: "🧠",  bri: 220, ct: 200, desc: "Neutral"      },
+  { id: "training",  label: "Training",  icon: "⚡",  bri: 254, ct: 153, desc: "High energy"  },
+  { id: "wind_down", label: "Wind Down", icon: "🌙",  bri: 80,  ct: 400, desc: "Warm & dim"   },
+  { id: "sleep",     label: "Sleep",     icon: "😴",  bri: 10,  ct: 500, desc: "Near off"     },
+  { id: "meal_prep", label: "Meal Prep", icon: "🍳",  bri: 240, ct: 230, desc: "Bright & clear"},
 ];
 
-const MOCK_HUE_STATE = {
-  connected: false,
-  bridgeIp: "",
-  username: "",
-  lights: [],
+const TARGET_CAL     = 1685;
+const TARGET_PROTEIN = 170;
+
+// ─── COLOR SYSTEM ──────────────────────────────────────────────────────────────
+const C = {
+  bg:        "#000814",
+  panel:     "rgba(0, 18, 42, 0.92)",
+  border:    "rgba(0, 212, 255, 0.18)",
+  borderDim: "rgba(0, 212, 255, 0.07)",
+  cyan:      "#00d4ff",
+  blue:      "#0096ff",
+  text:      "#c8e8ff",
+  dim:       "#3d6275",
+  green:     "#00ff99",
+  orange:    "#ff8c00",
+  red:       "#ff2255",
+  yellow:    "#ffd600",
+  purple:    "#8b5cf6",
 };
 
-function useLocalStorage(key, defaultVal) {
+// ─── HELPERS ───────────────────────────────────────────────────────────────────
+const isTrainingDay = () => [1,2,3,6].includes(new Date().getDay());
+const isRestDay     = () => [0,4].includes(new Date().getDay());
+const todayStr      = () => new Date().toLocaleDateString("en-US", { weekday:"long", month:"long", day:"numeric" });
+const timeStr       = () => new Date().toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+
+const getTodayRitual = () => {
+  const d = new Date().getDay();
+  if (d === 0) return "🥯 Bagel Pub + Meal Prep Day";
+  if (d === 3) return "🍔 Wednesday Smash Burger Night";
+  if (d === 6) return "🍟 Saturday McDonald's";
+  return null;
+};
+
+const wxEmoji = (c) => {
+  if (c === 0) return "☀️";
+  if (c <= 3)  return "⛅";
+  if (c <= 9)  return "🌫️";
+  if (c <= 49) return "🌧️";
+  if (c <= 79) return "❄️";
+  if (c <= 99) return "⛈️";
+  return "🌡️";
+};
+const wxDesc = (c) => {
+  if (c === 0)  return "Clear";
+  if (c <= 3)   return "Partly Cloudy";
+  if (c <= 9)   return "Foggy";
+  if (c <= 29)  return "Rain";
+  if (c <= 49)  return "Drizzle";
+  if (c <= 69)  return "Snow";
+  if (c <= 79)  return "Sleet";
+  if (c <= 99)  return "Thunderstorm";
+  return "Unknown";
+};
+
+// ─── PKCE UTILITIES ────────────────────────────────────────────────────────────
+function genVerifier() {
+  const a = new Uint8Array(32);
+  crypto.getRandomValues(a);
+  return btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+}
+async function genChallenge(v) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
+}
+
+// ─── LOCAL STORAGE HOOK ────────────────────────────────────────────────────────
+function useLocalStorage(key, def) {
   const [val, setVal] = useState(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : defaultVal;
-    } catch { return defaultVal; }
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : def; }
+    catch { return def; }
   });
-  const set = useCallback((v) => {
+  const set = useCallback(v => {
     setVal(v);
     try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
   }, [key]);
   return [val, set];
 }
 
-function timeGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  if (h < 21) return "Good evening";
-  return "Good night";
-}
+// ─── SPOTIFY HOOK ──────────────────────────────────────────────────────────────
+function useSpotify() {
+  const [clientId, setClientId] = useLocalStorage("jarvis_spotify_cid", "");
+  const [token,    setToken]    = useLocalStorage("jarvis_spotify_token", "");
+  const [expiry,   setExpiry]   = useLocalStorage("jarvis_spotify_expiry", 0);
+  const [now,      setNow]      = useState(null);
 
-function todayStr() {
-  return new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
+  const connected = !!(token && Date.now() < expiry);
+  const SCOPES = "user-read-playback-state user-modify-playback-state user-read-currently-playing";
 
-function isTrainingDay() {
-  const d = new Date().getDay();
-  return [1,2,3,6].includes(d); // Mon Tue Wed Sat
-}
+  useEffect(() => {
+    if (!connected) return;
+    const poll = async () => {
+      try {
+        const r = await fetch("https://api.spotify.com/v1/me/player", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (r.status === 200) setNow(await r.json());
+        else setNow(null);
+      } catch { setNow(null); }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => clearInterval(id);
+  }, [connected, token]);
 
-function isRestDay() {
-  const d = new Date().getDay();
-  return [0,4].includes(d); // Sun Thu
-}
-
-function getTodayRitual() {
-  const d = new Date().getDay();
-  if (d === 0) return "🥯 Bagel Pub + Meal Prep Day";
-  if (d === 3) return "🍔 Wednesday Smash Burger Night";
-  if (d === 6) return "🍟 Saturday McDonald's";
-  return null;
-}
-
-export default function Jarvis() {
-  const [tab, setTab] = useState("briefing");
-  const [macros, setMacros] = useLocalStorage("jarvis_macros", { cal: 0, protein: 0, carbs: 0, fat: 0 });
-  const [measurements, setMeasurements] = useLocalStorage("jarvis_measurements", { weight: [], waist: [] });
-  const [sleep, setSleep] = useLocalStorage("jarvis_sleep", []);
-  const [hue, setHue] = useLocalStorage("jarvis_hue", MOCK_HUE_STATE);
-  const [hueInput, setHueInput] = useState({ ip: hue.bridgeIp || "", username: hue.username || "" });
-  const [lightStatus, setLightStatus] = useState({});
-  const [sceneLoading, setSceneLoading] = useState(null);
-  const [recipeFilter, setRecipeFilter] = useState({ search: "", meal: "all", cuisine: "all", maxCal: 800 });
-  const [logInput, setLogInput] = useState({ cal: "", protein: "", carbs: "", fat: "" });
-  const [measureInput, setMeasureInput] = useState({ weight: "", waist: "" });
-  const [sleepInput, setSleepInput] = useState({ hours: "", bedtime: "" });
-  const [coffeeOn, setCoffeeOn] = useLocalStorage("jarvis_coffee", false);
-  const [notification, setNotification] = useState(null);
-
-  const targetCal = 1685;
-  const targetProtein = 170;
-
-  const todayRitual = getTodayRitual();
-  const training = isTrainingDay();
-  const rest = isRestDay();
-
-  const latestWeight = measurements.weight.length ? measurements.weight[measurements.weight.length - 1].val : null;
-  const latestWaist = measurements.waist.length ? measurements.waist[measurements.waist.length - 1].val : null;
-  const avgSleep = sleep.length ? (sleep.slice(-7).reduce((a,b) => a + b.hours, 0) / Math.min(sleep.length, 7)).toFixed(1) : null;
-  const sleepDebt = avgSleep ? Math.max(0, (8 - parseFloat(avgSleep)) * 7).toFixed(1) : null;
-
-  const calLeft = Math.max(0, targetCal - macros.cal);
-  const proteinLeft = Math.max(0, targetProtein - macros.protein);
-  const calPct = Math.min(100, Math.round((macros.cal / targetCal) * 100));
-  const proteinPct = Math.min(100, Math.round((macros.protein / targetProtein) * 100));
-
-  function notify(msg, type = "success") {
-    setNotification({ msg, type });
-    setTimeout(() => setNotification(null), 3000);
-  }
-
-  async function callHueApi(path, method = "GET", body = null) {
-    if (!hue.bridgeIp || !hue.username) return null;
-    const url = `http://${hue.bridgeIp}/api/${hue.username}${path}`;
-    const opts = { method, headers: { "Content-Type": "application/json" } };
-    if (body) opts.body = JSON.stringify(body);
-    try {
-      const res = await fetch(url, opts);
-      return await res.json();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async function connectHue() {
-    const ip = hueInput.ip.trim();
-    const user = hueInput.username.trim();
-    if (!ip || !user) { notify("Enter bridge IP and username", "error"); return; }
-    const data = await fetch(`http://${ip}/api/${user}/lights`).then(r => r.json()).catch(() => null);
-    if (!data || data[0]?.error) { notify("Could not connect to Hue Bridge", "error"); return; }
-    const lights = Object.entries(data).map(([id, l]) => ({ id, name: l.name, on: l.state.on, bri: l.state.bri }));
-    setHue({ connected: true, bridgeIp: ip, username: user, lights });
-    notify("Connected to Hue Bridge!");
-  }
-
-  async function applyScene(scene) {
-    setSceneLoading(scene.id);
-    if (hue.connected && hue.lights.length > 0) {
-      const promises = hue.lights.map(l =>
-        callHueApi(`/lights/${l.id}/state`, "PUT", { on: scene.bri > 0, bri: scene.bri, ct: scene.ct, transitiontime: 10 })
-      );
-      await Promise.all(promises);
-      notify(`${scene.label} mode activated`);
-    } else {
-      await new Promise(r => setTimeout(r, 600));
-      notify(`${scene.label} — connect Hue Bridge to control lights`);
-    }
-    setSceneLoading(null);
-  }
-
-  async function toggleCoffee() {
-    const next = !coffeeOn;
-    setCoffeeOn(next);
-    notify(next ? "☕ Coffee maker on" : "Coffee maker off");
-  }
-
-  function logMacros() {
-    const c = parseFloat(logInput.cal) || 0;
-    const p = parseFloat(logInput.protein) || 0;
-    const ca = parseFloat(logInput.carbs) || 0;
-    const f = parseFloat(logInput.fat) || 0;
-    setMacros({ cal: macros.cal + c, protein: macros.protein + p, carbs: macros.carbs + ca, fat: macros.fat + f });
-    setLogInput({ cal: "", protein: "", carbs: "", fat: "" });
-    notify("Macros logged");
-  }
-
-  function resetMacros() {
-    setMacros({ cal: 0, protein: 0, carbs: 0, fat: 0 });
-    notify("Macros reset for new day");
-  }
-
-  function logMeasurement() {
-    const w = parseFloat(measureInput.weight);
-    const wa = parseFloat(measureInput.waist);
-    const date = new Date().toLocaleDateString();
-    const newM = { ...measurements };
-    if (w) newM.weight = [...measurements.weight, { date, val: w }].slice(-30);
-    if (wa) newM.waist = [...measurements.waist, { date, val: wa }].slice(-30);
-    setMeasurements(newM);
-    setMeasureInput({ weight: "", waist: "" });
-    notify("Measurements saved");
-  }
-
-  function logSleep() {
-    const h = parseFloat(sleepInput.hours);
-    if (!h) { notify("Enter sleep hours", "error"); return; }
-    const date = new Date().toLocaleDateString();
-    setSleep([...sleep, { date, hours: h, bedtime: sleepInput.bedtime }].slice(-30));
-    setSleepInput({ hours: "", bedtime: "" });
-    notify("Sleep logged");
-  }
-
-  const filteredRecipes = RECIPES.filter(r => {
-    const matchSearch = r.name.toLowerCase().includes(recipeFilter.search.toLowerCase()) ||
-      r.tags.some(t => t.includes(recipeFilter.search.toLowerCase()));
-    const matchMeal = recipeFilter.meal === "all" || r.meal.includes(parseInt(recipeFilter.meal));
-    const matchCuisine = recipeFilter.cuisine === "all" || r.cuisine === recipeFilter.cuisine;
-    const matchCal = r.cal <= recipeFilter.maxCal;
-    return matchSearch && matchMeal && matchCuisine && matchCal;
-  });
-
-  const cuisines = [...new Set(RECIPES.map(r => r.cuisine))].sort();
-
-  const styles = {
-    app: { fontFamily: "'DM Sans', 'SF Pro Display', system-ui, sans-serif", minHeight: "100vh", background: "#0a0a0f", color: "#e8e8f0" },
-    header: { padding: "20px 24px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" },
-    headerTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 },
-    greeting: { fontSize: 13, color: "#6b6b8a", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 },
-    title: { fontSize: 26, fontWeight: 600, color: "#e8e8f0", letterSpacing: "-0.02em" },
-    date: { fontSize: 13, color: "#6b6b8a", marginTop: 2 },
-    statusPills: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 },
-    pill: (color) => ({ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, background: color + "22", color: color, border: `1px solid ${color}44` }),
-    tabs: { display: "flex", gap: 0, overflowX: "auto" },
-    tab: (active) => ({ padding: "10px 16px", fontSize: 13, fontWeight: active ? 600 : 400, color: active ? "#a78bfa" : "#6b6b8a", borderBottom: active ? "2px solid #a78bfa" : "2px solid transparent", background: "none", border: "none", borderBottom: active ? "2px solid #a78bfa" : "2px solid transparent", cursor: "pointer", whiteSpace: "nowrap", transition: "color 0.2s" }),
-    content: { padding: "20px 24px", maxWidth: 720, margin: "0 auto" },
-    card: { background: "#13131f", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "16px 20px", marginBottom: 16 },
-    cardTitle: { fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6b6b8a", marginBottom: 12, fontWeight: 600 },
-    grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-    grid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 },
-    metricCard: { background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 10, padding: "12px 14px" },
-    metricLabel: { fontSize: 11, color: "#6b6b8a", marginBottom: 4, letterSpacing: "0.06em" },
-    metricValue: { fontSize: 22, fontWeight: 600, color: "#e8e8f0", letterSpacing: "-0.02em" },
-    metricUnit: { fontSize: 12, color: "#6b6b8a", marginLeft: 3 },
-    progressBar: (pct, color) => ({ width: "100%", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden", marginTop: 8, position: "relative" }),
-    progressFill: (pct, color) => ({ width: `${pct}%`, height: "100%", background: color, borderRadius: 2, transition: "width 0.5s ease" }),
-    btn: (variant = "default") => ({
-      padding: "9px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", border: "none", transition: "all 0.15s",
-      background: variant === "primary" ? "#a78bfa" : variant === "danger" ? "#ef4444" : variant === "success" ? "#10b981" : "rgba(255,255,255,0.07)",
-      color: variant === "primary" || variant === "danger" || variant === "success" ? "#fff" : "#c8c8e0",
-    }),
-    input: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 12px", color: "#e8e8f0", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box" },
-    sceneGrid: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 },
-    sceneBtn: (active, loading) => ({ background: loading ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${active ? "#a78bfa" : "rgba(255,255,255,0.08)"}`, borderRadius: 10, padding: "12px 8px", cursor: "pointer", textAlign: "center", transition: "all 0.2s", opacity: loading ? 0.7 : 1 }),
-    recipeCard: { background: "#0f0f1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "14px 16px", marginBottom: 10 },
-    tag: { display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: 500, background: "rgba(167,139,250,0.12)", color: "#a78bfa", marginRight: 4 },
-    select: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "8px 12px", color: "#e8e8f0", fontSize: 13, outline: "none" },
-    notification: (type) => ({ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", padding: "10px 20px", borderRadius: 10, background: type === "error" ? "#ef444422" : "#10b98122", border: `1px solid ${type === "error" ? "#ef4444" : "#10b981"}`, color: type === "error" ? "#ef4444" : "#10b981", fontSize: 14, fontWeight: 500, zIndex: 1000, whiteSpace: "nowrap" }),
-    ritual: { background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 14, color: "#fbbf24", display: "flex", alignItems: "center", gap: 8 },
-    waistProgress: { marginTop: 8 },
-    waistBar: { width: "100%", height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 4, overflow: "hidden", marginTop: 6, position: "relative" },
-    separator: { height: 1, background: "rgba(255,255,255,0.05)", margin: "12px 0" },
+  const login = async () => {
+    if (!clientId) return;
+    const v = genVerifier();
+    const c = await genChallenge(v);
+    localStorage.setItem("_sv", v);
+    const p = new URLSearchParams({
+      client_id: clientId, response_type: "code",
+      redirect_uri: window.location.origin,
+      code_challenge_method: "S256", code_challenge: c,
+      scope: SCOPES, state: "spotify"
+    });
+    window.location.href = `https://accounts.spotify.com/authorize?${p}`;
   };
 
-  const waistTarget = 82.5;
-  const waistPct = latestWaist ? Math.min(100, Math.round((1 - Math.max(0, latestWaist - waistTarget) / 10) * 100)) : 0;
+  const handleCallback = async (code) => {
+    const v = localStorage.getItem("_sv");
+    const r = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId, grant_type: "authorization_code",
+        code, redirect_uri: window.location.origin, code_verifier: v
+      })
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      setToken(d.access_token);
+      setExpiry(Date.now() + d.expires_in * 1000);
+      localStorage.removeItem("_sv");
+    }
+  };
 
+  const control = async (cmd) => {
+    if (!connected) return;
+    const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    try {
+      if (cmd === "pause")   await fetch("https://api.spotify.com/v1/me/player/pause",    { method:"PUT",  headers:h });
+      else if (cmd === "play")    await fetch("https://api.spotify.com/v1/me/player/play",     { method:"PUT",  headers:h });
+      else if (cmd === "next")    await fetch("https://api.spotify.com/v1/me/player/next",     { method:"POST", headers:h });
+      else if (cmd === "prev")    await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers:h });
+      else if (cmd.startsWith("play:")) {
+        const q   = cmd.slice(5);
+        const sr  = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track,playlist&limit=1`, { headers:h });
+        const sd  = await sr.json();
+        const uri = sd.playlists?.items?.[0]?.uri || sd.tracks?.items?.[0]?.uri;
+        if (uri) {
+          const body = uri.includes("playlist") ? { context_uri: uri } : { uris: [uri] };
+          await fetch("https://api.spotify.com/v1/me/player/play", { method:"PUT", headers:h, body:JSON.stringify(body) });
+        }
+      }
+    } catch {}
+  };
+
+  const disconnect = () => { setToken(""); setExpiry(0); setNow(null); };
+
+  return { clientId, setClientId, connected, login, handleCallback, control, disconnect, nowPlaying: now };
+}
+
+// ─── GOOGLE CALENDAR HOOK ──────────────────────────────────────────────────────
+function useCalendar() {
+  const [clientId, setClientId] = useLocalStorage("jarvis_gcal_cid", "");
+  const [token,    setToken]    = useLocalStorage("jarvis_gcal_token", "");
+  const [expiry,   setExpiry]   = useLocalStorage("jarvis_gcal_expiry", 0);
+  const [events,   setEvents]   = useState([]);
+
+  const connected = !!(token && Date.now() < expiry);
+  const SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
+
+  useEffect(() => { if (connected) fetchEvents(); }, [connected]);
+
+  const fetchEvents = async () => {
+    if (!token) return;
+    try {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const end   = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1).toISOString();
+      const r = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&orderBy=startTime&singleEvents=true&maxResults=10`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      setEvents(d.items || []);
+    } catch {}
+  };
+
+  const login = async () => {
+    if (!clientId) return;
+    const v = genVerifier();
+    const c = await genChallenge(v);
+    localStorage.setItem("_gv",   v);
+    localStorage.setItem("_gcid", clientId);
+    const p = new URLSearchParams({
+      client_id: clientId, redirect_uri: window.location.origin,
+      response_type: "code", scope: SCOPES,
+      code_challenge_method: "S256", code_challenge: c,
+      access_type: "online", state: "gcal"
+    });
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
+  };
+
+  const handleCallback = async (code) => {
+    const v   = localStorage.getItem("_gv");
+    const cid = localStorage.getItem("_gcid") || clientId;
+    const r = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: cid, code_verifier: v, code,
+        grant_type: "authorization_code", redirect_uri: window.location.origin
+      })
+    });
+    const d = await r.json();
+    if (d.access_token) {
+      setToken(d.access_token);
+      setExpiry(Date.now() + (d.expires_in || 3600) * 1000);
+      localStorage.removeItem("_gv");
+    }
+  };
+
+  const disconnect = () => { setToken(""); setExpiry(0); setEvents([]); };
+
+  return { clientId, setClientId, connected, login, handleCallback, disconnect, events, fetchEvents };
+}
+
+// ─── WEATHER HOOK ──────────────────────────────────────────────────────────────
+function useWeather() {
+  const [data, setData] = useState(null);
+  const [city, setCity] = useState("");
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(async ({ coords: { latitude: lat, longitude: lon } }) => {
+      try {
+        const [wr, gr] = await Promise.all([
+          fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`),
+          fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`)
+        ]);
+        const wd = await wr.json();
+        const gd = await gr.json();
+        setData(wd.current);
+        setCity(gd.address?.city || gd.address?.town || gd.address?.village || "");
+      } catch {}
+    }, () => {});
+  }, []);
+
+  return { data, city };
+}
+
+// ─── JARVIS AI HOOK ────────────────────────────────────────────────────────────
+function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, onAction }) {
+  const [listening, setListening] = useState(false);
+  const [thinking,  setThinking]  = useState(false);
+  const [speaking,  setSpeaking]  = useState(false);
+  const [transcript,setTranscript]= useState("");
+  const [response,  setResponse]  = useState("");
+  const [apiKey,    setApiKey]    = useLocalStorage("jarvis_api_key", "");
+  const recogRef = useRef(null);
+  const voicesRef = useRef([]);
+
+  useEffect(() => {
+    const load = () => { voicesRef.current = window.speechSynthesis.getVoices(); };
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
+  const speak = useCallback((text) => {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.05; u.pitch = 0.82; u.volume = 1;
+    const voices = voicesRef.current;
+    const voice = voices.find(v => v.name === "Daniel") ||
+                  voices.find(v => v.name === "Arthur") ||
+                  voices.find(v => v.name.includes("UK English Male")) ||
+                  voices.find(v => v.lang === "en-GB") ||
+                  voices.find(v => v.lang.startsWith("en")) || null;
+    if (voice) u.voice = voice;
+    u.onstart = () => setSpeaking(true);
+    u.onend   = () => setSpeaking(false);
+    window.speechSynthesis.speak(u);
+    setResponse(text);
+  }, []);
+
+  const buildContext = useCallback(() => {
+    const lw   = measurements.weight.slice(-1)[0]?.val;
+    const lwa  = measurements.waist.slice(-1)[0]?.val;
+    const avgS = sleepData.length ? (sleepData.slice(-7).reduce((a,b)=>a+b.hours,0) / Math.min(sleepData.length,7)).toFixed(1) : null;
+    const np   = spotify.nowPlaying;
+    const now  = new Date();
+    const ritual = getTodayRitual();
+
+    return `You are JARVIS (Just A Rather Very Intelligent System), Mark's personal AI assistant embedded in his home dashboard. Be precise, occasionally dry-witted, and slightly formal — like the AI from Iron Man. Responses are spoken aloud: 1-3 sentences maximum. No markdown, no bullet points, just clean natural speech.
+
+CURRENT STATE:
+Time: ${now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})} — ${now.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+Day type: ${isTrainingDay() ? "Training Day (Mon/Tue/Wed/Sat)" : isRestDay() ? "Rest Day (Sun/Thu)" : "Active Day"}${ritual ? `\nToday's ritual: ${ritual}` : ""}
+
+NUTRITION:
+Calories: ${Math.round(macros.cal)} / ${TARGET_CAL} (${Math.round(TARGET_CAL - macros.cal)} remaining)
+Protein:  ${Math.round(macros.protein)}g / ${TARGET_PROTEIN}g (${Math.round(TARGET_PROTEIN - macros.protein)}g remaining)
+Carbs: ${Math.round(macros.carbs)}g | Fat: ${Math.round(macros.fat)}g
+
+BODY: Weight: ${lw ? lw + " lbs" : "not logged"} | Waist: ${lwa ? lwa + " cm (target 81-84cm)" : "not logged"} | Avg sleep (7d): ${avgS ? avgS + " hrs" : "no data"}
+
+ENVIRONMENT: Hue ${hue.connected ? "connected (" + hue.lights.length + " lights)" : "disconnected"} | Coffee: ${coffeeOn ? "on" : "off"} | Weather: ${weather.data ? Math.round(weather.data.temperature_2m) + "°F " + wxDesc(weather.data.weather_code) + (weather.city ? " in " + weather.city : "") : "unavailable"}
+
+SPOTIFY: ${np?.is_playing ? `Playing "${np.item?.name}" by ${np.item?.artists?.[0]?.name}` : spotify.connected ? "Connected, nothing playing" : "Not connected"}
+
+CALENDAR: ${calendar.events?.length ? calendar.events.map(e => e.summary + (e.start?.dateTime ? " at " + new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "")).join("; ") : "No events today"}
+
+AVAILABLE ACTIONS (append to end of response, only when taking an action):
+<action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
+<action>{"type":"spotify","cmd":"play|pause|next|prev|play:search query"}</action>
+<action>{"type":"log_macros","cal":0,"protein":0,"carbs":0,"fat":0}</action>
+<action>{"type":"reset_macros"}</action>
+<action>{"type":"coffee","on":true}</action>`;
+  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn]);
+
+  const processCommand = useCallback(async (text) => {
+    setThinking(true);
+    setTranscript(text);
+    const system = buildContext();
+
+    const tryDirect = async () => {
+      if (!apiKey) throw new Error("no key");
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
+      });
+      return r.json();
+    };
+
+    let data;
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey || undefined, system, messages: [{ role:"user", content:text }] })
+      });
+      if (r.status === 404) data = await tryDirect();
+      else data = await r.json();
+    } catch {
+      try { data = await tryDirect(); }
+      catch { speak("I can't reach my processing core. Please add your Anthropic API key in Settings."); setThinking(false); return; }
+    }
+
+    if (data?.error) { speak("I encountered an issue: " + (data.error.message || "unknown error.")); setThinking(false); return; }
+
+    let txt = data?.content?.[0]?.text || "";
+    const match = txt.match(/<action>([\s\S]*?)<\/action>/);
+    if (match) {
+      try { onAction(JSON.parse(match[1].trim())); } catch {}
+      txt = txt.replace(/<action>[\s\S]*?<\/action>/, "").trim();
+    }
+    speak(txt);
+    setThinking(false);
+  }, [buildContext, apiKey, onAction, speak]);
+
+  const startListening = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { speak("Speech recognition requires Chrome or Edge."); return; }
+    if (recogRef.current) recogRef.current.abort();
+    const r = new SR();
+    r.lang = "en-US"; r.continuous = false; r.interimResults = false;
+    r.onstart  = () => setListening(true);
+    r.onresult = (e) => { setListening(false); processCommand(e.results[0][0].transcript); };
+    r.onend    = () => setListening(false);
+    r.onerror  = () => setListening(false);
+    recogRef.current = r;
+    r.start();
+  }, [processCommand, speak]);
+
+  const stopListening = useCallback(() => {
+    recogRef.current?.stop();
+    setListening(false);
+  }, []);
+
+  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey };
+}
+
+// ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
+function HUDCard({ title, children, accent = C.cyan, style = {}, className = "" }) {
+  const b = (t, r, bo, l) => ({
+    position:"absolute", width:10, height:10, borderColor:accent, borderStyle:"solid", borderWidth:0,
+    ...(t  !== undefined && { top:-1,    borderTopWidth:2    }),
+    ...(bo !== undefined && { bottom:-1, borderBottomWidth:2 }),
+    ...(l  !== undefined && { left:-1,   borderLeftWidth:2   }),
+    ...(r  !== undefined && { right:-1,  borderRightWidth:2  }),
+    opacity: 0.75,
+  });
   return (
-    <div style={styles.app}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <div className={`fade-in ${className}`} style={{ position:"relative", background:C.panel, border:`1px solid ${accent}18`, borderRadius:3, padding:"16px 20px", marginBottom:14, ...style }}>
+      <div style={b(0,undefined,undefined,0)} />
+      <div style={b(0,0,undefined,undefined)} />
+      <div style={b(undefined,undefined,0,0)} />
+      <div style={b(undefined,0,0,undefined)} />
+      {title && <div style={{ fontSize:10, letterSpacing:"0.15em", textTransform:"uppercase", color:accent, marginBottom:14, fontWeight:700, opacity:0.9 }}>◆ {title}</div>}
+      {children}
+    </div>
+  );
+}
 
-      {notification && <div style={styles.notification(notification.type)}>{notification.msg}</div>}
+function GlowBar({ pct, color = C.cyan, height = 3 }) {
+  return (
+    <div style={{ width:"100%", height, background:"rgba(255,255,255,0.05)", borderRadius:2, overflow:"hidden", marginTop:8 }}>
+      <div className="progress-bar-fill" style={{
+        width:`${Math.min(100, pct || 0)}%`, height:"100%",
+        background:`linear-gradient(90deg, ${color}77, ${color})`,
+        borderRadius:2, boxShadow:`0 0 6px ${color}88`, transition:"width 1s ease"
+      }} />
+    </div>
+  );
+}
 
-      <div style={styles.header}>
-        <div style={styles.headerTop}>
-          <div>
-            <div style={styles.greeting}>JARVIS</div>
-            <div style={styles.title}>{timeGreeting()}, Mark</div>
-            <div style={styles.date}>{todayStr()}</div>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>TODAY</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: training ? "#10b981" : "#6b6b8a" }}>
-              {training ? "⚡ Training Day" : rest ? "😴 Rest Day" : "Active Day"}
-            </div>
-          </div>
+function Metric({ label, value, unit, sub, color = C.text, pct, barColor }) {
+  return (
+    <div style={{ background:"rgba(0,212,255,0.02)", border:`1px solid ${C.borderDim}`, borderRadius:4, padding:"12px 14px" }}>
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.dim, marginBottom:5, textTransform:"uppercase" }}>{label}</div>
+      <div style={{ display:"flex", alignItems:"baseline", gap:3 }}>
+        <span style={{ fontSize:22, fontWeight:700, color, letterSpacing:"-0.02em", fontVariantNumeric:"tabular-nums" }}>{value}</span>
+        {unit && <span style={{ fontSize:11, color:C.dim }}>{unit}</span>}
+      </div>
+      {sub && <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{sub}</div>}
+      {pct !== undefined && <GlowBar pct={pct} color={barColor || color} />}
+    </div>
+  );
+}
+
+function ArcReactor({ size = 60, state = "idle" }) {
+  const col = { idle:"#00d4ff", listening:"#ff2255", thinking:"#ffd600", speaking:"#00ff99" }[state] || C.cyan;
+  const spin    = state === "thinking";
+  const pulseR  = state === "idle" || state === "speaking";
+  const pulseC  = state === "idle" || state === "speaking";
+  const isListen= state === "listening";
+  return (
+    <div style={{ width:size, height:size, position:"relative" }}>
+      {isListen && [1,2,3].map(i => (
+        <div key={i} style={{
+          position:"absolute", inset: -i*14,
+          border:`1px solid ${col}`, borderRadius:"50%",
+          animation:`ripple ${0.9+i*0.35}s ease-out infinite`,
+          animationDelay:`${i*0.18}s`, opacity:0.4, pointerEvents:"none"
+        }} />
+      ))}
+      <div className={spin ? "arc-spin" : pulseR ? "arc-pulse-ring" : ""}
+        style={{ position:"absolute", inset:0, border:`2px solid ${col}`, borderRadius:"50%", boxShadow:`0 0 10px ${col}55` }} />
+      <div style={{ position:"absolute", inset:8, border:`1px solid ${col}44`, borderRadius:"50%" }} />
+      <div style={{ position:"absolute", inset:14, border:`1px solid ${col}22`, borderRadius:"50%" }} />
+      <div className={pulseC ? "arc-core-pulse" : ""}
+        style={{
+          position:"absolute", inset:20,
+          background:`radial-gradient(circle, ${col}, ${col}99)`,
+          borderRadius:"50%", boxShadow:`0 0 12px ${col}, 0 0 25px ${col}66`
+        }} />
+    </div>
+  );
+}
+
+function HUDBtn({ onClick, children, variant = "default", style = {}, disabled = false }) {
+  const bg = {
+    primary: `linear-gradient(135deg, ${C.cyan}22, ${C.blue}33)`,
+    success: `linear-gradient(135deg, ${C.green}22, ${C.green}11)`,
+    danger:  `linear-gradient(135deg, ${C.red}22, ${C.red}11)`,
+    default: "rgba(255,255,255,0.04)",
+  }[variant];
+  const border = {
+    primary: `1px solid ${C.cyan}55`,
+    success: `1px solid ${C.green}55`,
+    danger:  `1px solid ${C.red}55`,
+    default: `1px solid rgba(255,255,255,0.1)`,
+  }[variant];
+  const color = {
+    primary: C.cyan,
+    success: C.green,
+    danger:  C.red,
+    default: C.text,
+  }[variant];
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background:bg, border, color, borderRadius:4, padding:"9px 16px",
+      fontSize:13, fontWeight:600, cursor:disabled?"not-allowed":"pointer",
+      letterSpacing:"0.04em", transition:"all 0.15s", opacity:disabled?0.5:1,
+      boxShadow:variant!=="default"?`0 0 12px ${color}22`:"none",
+      ...style
+    }}>{children}</button>
+  );
+}
+
+function HUDInput({ label, style = {}, ...props }) {
+  return (
+    <div style={{ marginBottom:12, ...style }}>
+      {label && <div style={{ fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase", color:C.dim, marginBottom:5 }}>{label}</div>}
+      <input {...props} style={{
+        width:"100%", background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
+        borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none",
+        fontFamily:"inherit", boxSizing:"border-box"
+      }} />
+    </div>
+  );
+}
+
+function StatusDot({ on, label }) {
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:12, color: on ? C.green : C.dim }}>
+      <span style={{ width:6, height:6, borderRadius:"50%", background: on ? C.green : C.dim,
+        boxShadow: on ? `0 0 6px ${C.green}` : "none" }} />
+      {label}
+    </span>
+  );
+}
+
+function NowPlaying({ spotify }) {
+  const np = spotify.nowPlaying;
+  if (!spotify.connected || !np?.is_playing) return null;
+  const track = np.item;
+  const art   = track?.album?.images?.[0]?.url;
+  return (
+    <HUDCard style={{ padding:"12px 16px", marginBottom:14 }} accent={C.green}>
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        {art && <img src={art} alt="" style={{ width:44, height:44, borderRadius:4, border:`1px solid ${C.green}33` }} />}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{track?.name}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{track?.artists?.map(a=>a.name).join(", ")}</div>
         </div>
-
-        {todayRitual && <div style={styles.ritual}>{todayRitual}</div>}
-
-        <div style={styles.statusPills}>
-          <span style={styles.pill("#a78bfa")}>{Math.round(calLeft)} cal left</span>
-          <span style={styles.pill("#10b981")}>{Math.round(proteinLeft)}g protein left</span>
-          {latestWaist && <span style={styles.pill(latestWaist <= 84 ? "#10b981" : "#f59e0b")}>{latestWaist}cm waist</span>}
-          {avgSleep && <span style={styles.pill(parseFloat(avgSleep) >= 7 ? "#10b981" : "#ef4444")}>{avgSleep}h avg sleep</span>}
-          <span style={styles.pill(hue.connected ? "#10b981" : "#6b6b8a")}>{hue.connected ? "Hue ●" : "Hue ○"}</span>
-        </div>
-
-        <div style={styles.tabs}>
-          {[["briefing","Briefing"],["macros","Macros"],["environment","Home"],["recipes","Recipes"],["body","Body"],["sleep","Sleep"]].map(([id, label]) => (
-            <button key={id} style={styles.tab(tab === id)} onClick={() => setTab(id)}>{label}</button>
+        <div style={{ display:"flex", gap:6 }}>
+          {[["prev","⏮"],["play","▶"],["next","⏭"]].map(([cmd,icon]) => (
+            <button key={cmd} onClick={() => spotify.control(cmd==="play"? (np.is_playing?"pause":"play") : cmd)}
+              style={{ background:"rgba(0,255,153,0.06)", border:`1px solid ${C.green}33`, borderRadius:4,
+                padding:"5px 10px", color:C.green, fontSize:13, cursor:"pointer" }}>
+              {cmd==="play" ? (np.is_playing?"⏸":"▶") : icon}
+            </button>
           ))}
         </div>
       </div>
+    </HUDCard>
+  );
+}
 
-      <div style={styles.content}>
+// ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
+function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, weather, jarvis, coffeeOn }) {
+  const [time, setTime] = useState(timeStr());
+  const [cmd,  setCmd]  = useState("");
 
-        {tab === "briefing" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Today's targets</div>
-              <div style={styles.grid2}>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>CALORIES</div>
-                  <div><span style={styles.metricValue}>{Math.round(macros.cal)}</span><span style={styles.metricUnit}>/ {targetCal}</span></div>
-                  <div style={styles.progressBar(calPct)}><div style={styles.progressFill(calPct, "#a78bfa")} /></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>PROTEIN</div>
-                  <div><span style={styles.metricValue}>{Math.round(macros.protein)}g</span><span style={styles.metricUnit}>/ {targetProtein}g</span></div>
-                  <div style={styles.progressBar(proteinPct)}><div style={styles.progressFill(proteinPct, "#10b981")} /></div>
-                </div>
-              </div>
-            </div>
+  useEffect(() => {
+    const id = setInterval(() => setTime(timeStr()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Body progress</div>
-              <div style={styles.grid2}>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>WEIGHT</div>
-                  <div><span style={styles.metricValue}>{latestWeight || "—"}</span><span style={styles.metricUnit}>lbs</span></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>WAIST</div>
-                  <div><span style={styles.metricValue}>{latestWaist || "—"}</span><span style={styles.metricUnit}>cm</span></div>
-                  {latestWaist && (
-                    <div style={styles.waistBar}>
-                      <div style={{ ...styles.progressFill(waistPct, latestWaist <= 84 ? "#10b981" : "#f59e0b") }} />
-                    </div>
-                  )}
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginTop: 4 }}>Target: 81–84cm</div>
-                </div>
-              </div>
-            </div>
+  const lw    = measurements.weight.slice(-1)[0]?.val;
+  const lwa   = measurements.waist.slice(-1)[0]?.val;
+  const avgS  = sd.length ? (sd.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sd.length,7)).toFixed(1) : null;
+  const calL  = Math.max(0, TARGET_CAL - macros.cal);
+  const protL = Math.max(0, TARGET_PROTEIN - macros.protein);
+  const ritual= getTodayRitual();
+  const training = isTrainingDay();
+  const voiceState = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Recovery</div>
-              <div style={styles.grid3}>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>AVG SLEEP</div>
-                  <div><span style={styles.metricValue}>{avgSleep || "—"}</span><span style={styles.metricUnit}>hrs</span></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>SLEEP DEBT</div>
-                  <div><span style={{ ...styles.metricValue, color: sleepDebt > 5 ? "#ef4444" : "#e8e8f0" }}>{sleepDebt || "—"}</span><span style={styles.metricUnit}>hrs</span></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>TODAY</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: training ? "#10b981" : "#6b6b8a", marginTop: 4 }}>{training ? "Train" : rest ? "Rest" : "Active"}</div>
-                </div>
-              </div>
-            </div>
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!cmd.trim()) return;
+    jarvis.processCommand(cmd.trim());
+    setCmd("");
+  };
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Quick environment</div>
-              <div style={styles.sceneGrid}>
-                {LIGHTING_SCENES.slice(0, 6).map(s => (
-                  <button key={s.id} style={styles.sceneBtn(false, sceneLoading === s.id)} onClick={() => applyScene(s)}>
-                    <div style={{ fontSize: 20, marginBottom: 4 }}>{s.icon}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#c8c8e0" }}>{s.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
+  return (
+    <>
+      {/* ── Voice Interface ── */}
+      <HUDCard style={{ textAlign:"center", padding:"28px 20px" }}>
+        <div style={{ fontSize:10, letterSpacing:"0.2em", color:C.dim, marginBottom:16 }}>J.A.R.V.I.S  INTERFACE</div>
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
+          <button onClick={jarvis.listening ? jarvis.stopListening : jarvis.startListening}
+            style={{ background:"none", border:"none", cursor:"pointer", padding:12 }}>
+            <ArcReactor size={90} state={voiceState} />
+          </button>
+        </div>
+
+        {jarvis.transcript && (
+          <div className="fade-in-up" style={{ fontSize:13, color:"#ff7799", marginBottom:10, fontStyle:"italic", letterSpacing:"0.01em" }}>
+            "{jarvis.transcript}"
+          </div>
+        )}
+        {jarvis.response && (
+          <div className="fade-in-up" style={{ fontSize:14, color:C.text, lineHeight:1.65, marginBottom:14, maxWidth:480, margin:"0 auto 14px" }}>
+            {jarvis.response}
+          </div>
         )}
 
-        {tab === "macros" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Today's macros</div>
-              <div style={styles.grid2}>
-                {[
-                  { label: "Calories", val: macros.cal, target: targetCal, unit: "", color: "#a78bfa" },
-                  { label: "Protein", val: macros.protein, target: targetProtein, unit: "g", color: "#10b981" },
-                  { label: "Carbs", val: macros.carbs, target: 150, unit: "g", color: "#f59e0b" },
-                  { label: "Fat", val: macros.fat, target: 55, unit: "g", color: "#06b6d4" },
-                ].map(m => (
-                  <div key={m.label} style={styles.metricCard}>
-                    <div style={styles.metricLabel}>{m.label.toUpperCase()}</div>
-                    <div><span style={{ ...styles.metricValue, color: m.color }}>{Math.round(m.val)}{m.unit}</span><span style={styles.metricUnit}>/ {m.target}{m.unit}</span></div>
-                    <div style={styles.progressBar()}><div style={styles.progressFill(Math.min(100, Math.round(m.val/m.target*100)), m.color)} /></div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <form onSubmit={handleSubmit} style={{ display:"flex", gap:8, maxWidth:420, margin:"0 auto" }}>
+          <input value={cmd} onChange={e=>setCmd(e.target.value)}
+            placeholder="Type a command, or tap the reactor to speak..."
+            style={{ flex:1, background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
+              borderRadius:4, padding:"9px 13px", color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" }} />
+          <HUDBtn variant="primary" onClick={handleSubmit} style={{ padding:"9px 14px" }}>Send</HUDBtn>
+        </form>
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Log a meal</div>
-              <div style={styles.grid2}>
-                {["cal","protein","carbs","fat"].map(k => (
-                  <div key={k}>
-                    <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4, textTransform: "uppercase" }}>{k === "cal" ? "Calories" : k.charAt(0).toUpperCase() + k.slice(1)}</div>
-                    <input style={styles.input} type="number" placeholder="0" value={logInput[k]} onChange={e => setLogInput({...logInput, [k]: e.target.value})} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                <button style={styles.btn("primary")} onClick={logMacros}>Log Meal</button>
-                <button style={styles.btn()} onClick={resetMacros}>Reset Day</button>
-              </div>
-            </div>
+        <div style={{ fontSize:10, letterSpacing:"0.14em", color:C.dim, marginTop:12 }}>
+          {voiceState==="listening"?"● LISTENING — speak now"
+           :voiceState==="thinking"?"◆ PROCESSING..."
+           :voiceState==="speaking"?"▶ RESPONDING"
+           :"TAP REACTOR · TYPE · OR SPEAK A COMMAND"}
+        </div>
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Meal suggestions for remaining macros</div>
-              {RECIPES.filter(r => r.cal <= calLeft + 50 && r.protein >= 30).slice(0, 3).map(r => (
-                <div key={r.id} style={{ ...styles.recipeCard, marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "#e8e8f0" }}>#{r.id} {r.name}</div>
-                    <div style={{ fontSize: 13, color: "#a78bfa" }}>{r.cal} cal</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#6b6b8a", marginTop: 4 }}>{r.protein}g P · {r.carbs}g C · {r.fat}g F</div>
+        {!jarvis.apiKey && (
+          <div style={{ fontSize:11, color:C.orange, marginTop:12, padding:"7px 14px",
+            background:"rgba(255,140,0,0.07)", border:`1px solid ${C.orange}33`, borderRadius:4, display:"inline-block" }}>
+            ⚠ Anthropic API key required — configure in Settings
+          </div>
+        )}
+      </HUDCard>
+
+      {/* ── Now Playing ── */}
+      <NowPlaying spotify={spotify} />
+
+      {/* ── Ritual Banner ── */}
+      {ritual && (
+        <div style={{ background:"rgba(255,214,0,0.06)", border:`1px solid rgba(255,214,0,0.2)`,
+          borderRadius:4, padding:"10px 16px", marginBottom:14, fontSize:14, color:C.yellow,
+          display:"flex", alignItems:"center", gap:8 }}>
+          {ritual}
+        </div>
+      )}
+
+      {/* ── Time & Weather ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+        <HUDCard style={{ padding:"14px 16px", marginBottom:0 }}>
+          <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:4 }}>LOCAL TIME</div>
+          <div style={{ fontSize:26, fontWeight:700, color:C.cyan, letterSpacing:"0.06em", fontVariantNumeric:"tabular-nums" }}>{time}</div>
+          <div style={{ fontSize:11, color:C.dim, marginTop:3 }}>{todayStr()}</div>
+        </HUDCard>
+        <HUDCard style={{ padding:"14px 16px", marginBottom:0 }}>
+          <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:4 }}>ENVIRONMENT</div>
+          {weather.data
+            ? <>
+                <div style={{ fontSize:26, fontWeight:700, color:C.text }}>{wxEmoji(weather.data.weather_code)} {Math.round(weather.data.temperature_2m)}°F</div>
+                <div style={{ fontSize:11, color:C.dim, marginTop:3 }}>{wxDesc(weather.data.weather_code)}{weather.city ? " · "+weather.city : ""} · {weather.data.relative_humidity_2m}% RH</div>
+              </>
+            : <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>Allow location access for weather data</div>
+          }
+        </HUDCard>
+      </div>
+
+      {/* ── Nutrition ── */}
+      <HUDCard title="Nutrition Status">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          <Metric label="Calories" value={Math.round(macros.cal)} unit={`/ ${TARGET_CAL}`} sub={`${Math.round(calL)} remaining`}
+            color={macros.cal >= TARGET_CAL ? C.orange : C.cyan} pct={macros.cal/TARGET_CAL*100} barColor={C.cyan} />
+          <Metric label="Protein" value={`${Math.round(macros.protein)}g`} unit={`/ ${TARGET_PROTEIN}g`} sub={`${Math.round(protL)}g remaining`}
+            color={macros.protein >= TARGET_PROTEIN ? C.orange : C.green} pct={macros.protein/TARGET_PROTEIN*100} barColor={C.green} />
+        </div>
+      </HUDCard>
+
+      {/* ── Body & Recovery ── */}
+      <HUDCard title="Body & Recovery">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+          <Metric label="Weight" value={lw || "—"} unit="lbs" color={C.text} />
+          <Metric label="Waist" value={lwa || "—"} unit="cm" sub="Target 81-84"
+            color={!lwa ? C.text : lwa <= 84 ? C.green : C.orange}
+            pct={lwa ? Math.max(0, Math.min(100, (1-(lwa-83)/10)*100)) : 0}
+            barColor={lwa && lwa <= 84 ? C.green : C.orange} />
+          <Metric label="Avg Sleep" value={avgS || "—"} unit="hrs"
+            color={!avgS ? C.text : parseFloat(avgS) >= 7 ? C.green : C.red} />
+        </div>
+      </HUDCard>
+
+      {/* ── Calendar ── */}
+      {calendar.connected && calendar.events.length > 0 && (
+        <HUDCard title="Today's Schedule" accent={C.blue}>
+          {calendar.events.map((e, i) => {
+            const t = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "All day";
+            return (
+              <div key={i} style={{ display:"flex", gap:14, padding:"8px 0", borderBottom: i < calendar.events.length-1 ? `1px solid ${C.borderDim}` : "none" }}>
+                <div style={{ fontSize:11, color:C.blue, minWidth:52, paddingTop:1, fontVariantNumeric:"tabular-nums" }}>{t}</div>
+                <div style={{ fontSize:13, color:C.text }}>{e.summary}</div>
+              </div>
+            );
+          })}
+        </HUDCard>
+      )}
+
+      {/* ── Day Protocol ── */}
+      <HUDCard title={training?"⚡ Training Day Protocol":isRestDay()?"😴 Rest Day Protocol":"🏃 Active Day"}
+        accent={training ? C.orange : isRestDay() ? C.purple : C.dim}>
+        <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>
+          {training
+            ? "Prioritize compound lifts and high protein intake. Pre-workout window: 4:30–5:00 PM. Hit protein target before the session."
+            : isRestDay()
+            ? "Recovery and mobility focus. Light activity only. Maintain maintenance calories and hit your protein floor."
+            : "Active recovery day. Light movement, steady nutrition. Push to close out your macro targets by end of day."}
+        </div>
+      </HUDCard>
+    </>
+  );
+}
+
+// ─── MACROS TAB ────────────────────────────────────────────────────────────────
+function MacrosTab({ macros, setMacros, notify }) {
+  const [inp, setInp] = useState({ cal:"", protein:"", carbs:"", fat:"" });
+
+  const log = () => {
+    const n = v => parseFloat(v) || 0;
+    setMacros({ cal:macros.cal+n(inp.cal), protein:macros.protein+n(inp.protein), carbs:macros.carbs+n(inp.carbs), fat:macros.fat+n(inp.fat) });
+    setInp({ cal:"", protein:"", carbs:"", fat:"" });
+    notify("Meal logged", "success");
+  };
+
+  const reset = () => { setMacros({ cal:0, protein:0, carbs:0, fat:0 }); notify("Macros reset for new day", "success"); };
+
+  const calL  = Math.max(0, TARGET_CAL - macros.cal);
+  const protL = Math.max(0, TARGET_PROTEIN - macros.protein);
+
+  const rows = [
+    { k:"cal",     label:"Calories", val:macros.cal,     target:TARGET_CAL,     unit:"",  color:C.cyan   },
+    { k:"protein", label:"Protein",  val:macros.protein, target:TARGET_PROTEIN, unit:"g", color:C.green  },
+    { k:"carbs",   label:"Carbs",    val:macros.carbs,   target:150,            unit:"g", color:C.yellow },
+    { k:"fat",     label:"Fat",      val:macros.fat,     target:55,             unit:"g", color:C.blue   },
+  ];
+
+  return (
+    <>
+      <HUDCard title="Today's Macros">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+          {rows.map(m => (
+            <Metric key={m.k} label={m.label} value={`${Math.round(m.val)}${m.unit}`} unit={`/ ${m.target}${m.unit}`}
+              sub={`${Math.round(Math.max(0, m.target-m.val))}${m.unit} left`}
+              color={m.val >= m.target ? C.orange : m.color}
+              pct={m.val/m.target*100} barColor={m.color} />
+          ))}
+        </div>
+      </HUDCard>
+
+      <HUDCard title="Log a Meal">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+          {rows.map(m => (
+            <HUDInput key={m.k} label={m.label} type="number" placeholder="0"
+              value={inp[m.k]} onChange={e=>setInp({...inp, [m.k]:e.target.value})}
+              onKeyDown={e=>e.key==="Enter"&&log()} style={{ marginBottom:0 }} />
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <HUDBtn variant="primary" onClick={log}>Log Meal</HUDBtn>
+          <HUDBtn onClick={reset}>Reset Day</HUDBtn>
+        </div>
+      </HUDCard>
+
+      <HUDCard title="Smart Suggestions">
+        {RECIPES.filter(r => r.cal <= calL + 60 && r.protein >= 25).slice(0, 4).length === 0
+          ? <div style={{ fontSize:13, color:C.dim }}>You've hit your targets for today. Excellent work, sir.</div>
+          : RECIPES.filter(r => r.cal <= calL + 60 && r.protein >= 25).slice(0, 4).map(r => (
+              <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                padding:"10px 0", borderBottom:`1px solid ${C.borderDim}` }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.text }}>#{r.id} {r.name}</div>
+                  <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{r.protein}g P · {r.carbs}g C · {r.fat}g F · {r.time}min</div>
+                </div>
+                <div style={{ textAlign:"right", marginLeft:12 }}>
+                  <div style={{ fontSize:16, fontWeight:700, color:C.cyan }}>{r.cal}</div>
+                  <div style={{ fontSize:10, color:C.dim }}>cal</div>
+                </div>
+              </div>
+            ))
+        }
+      </HUDCard>
+    </>
+  );
+}
+
+// ─── ENVIRONMENT TAB ───────────────────────────────────────────────────────────
+function EnvironmentTab({ hue, setHue, coffeeOn, setCoffeeOn, sceneLoading, applyScene, notify }) {
+  const [hueInp, setHueInp] = useState({ ip:hue.bridgeIp||"", username:hue.username||"" });
+
+  const connectHue = async () => {
+    const ip = hueInp.ip.trim(), user = hueInp.username.trim();
+    if (!ip || !user) { notify("Enter bridge IP and API key", "error"); return; }
+    try {
+      const d = await fetch(`http://${ip}/api/${user}/lights`).then(r=>r.json());
+      if (!d || d[0]?.error) throw new Error("auth fail");
+      const lights = Object.entries(d).map(([id,l]) => ({ id, name:l.name, on:l.state.on, bri:l.state.bri }));
+      setHue({ connected:true, bridgeIp:ip, username:user, lights });
+      notify("Hue Bridge connected", "success");
+    } catch { notify("Could not connect to Hue Bridge", "error"); }
+  };
+
+  return (
+    <>
+      {/* Lighting Scenes */}
+      <HUDCard title="Lighting Scenes">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+          {LIGHTING_SCENES.map(s => (
+            <button key={s.id} onClick={() => applyScene(s)} disabled={!!sceneLoading}
+              style={{
+                background: sceneLoading===s.id ? `rgba(0,212,255,0.12)` : "rgba(0,212,255,0.03)",
+                border:`1px solid ${sceneLoading===s.id ? C.cyan+"66" : C.borderDim}`,
+                borderRadius:4, padding:"14px 8px", cursor:"pointer", textAlign:"center",
+                transition:"all 0.2s", opacity:sceneLoading&&sceneLoading!==s.id?0.5:1
+              }}>
+              <div style={{ fontSize:22, marginBottom:6 }}>{s.icon}</div>
+              <div style={{ fontSize:12, fontWeight:600, color:C.text, marginBottom:2 }}>{s.label}</div>
+              <div style={{ fontSize:10, color:C.dim }}>{s.desc}</div>
+            </button>
+          ))}
+        </div>
+      </HUDCard>
+
+      {/* Coffee Maker */}
+      <HUDCard title="Coffee Maker">
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:600, color:C.text }}>TP-Link Tapo Smart Plug</div>
+            <div style={{ fontSize:12, color:C.dim, marginTop:2 }}>
+              <StatusDot on={coffeeOn} label={coffeeOn ? "ON — brewing" : "OFF"} />
+            </div>
+          </div>
+          <HUDBtn variant={coffeeOn?"success":"default"} onClick={() => { setCoffeeOn(!coffeeOn); notify(coffeeOn?"Coffee maker off":"☕ Coffee maker on","success"); }} style={{ minWidth:90 }}>
+            {coffeeOn ? "☕ On" : "Off"}
+          </HUDBtn>
+        </div>
+        <div style={{ marginTop:12, fontSize:12, color:C.dim, borderTop:`1px solid ${C.borderDim}`, paddingTop:10 }}>
+          Integrate via Apple Shortcuts + HomeKit for full voice automation.
+        </div>
+      </HUDCard>
+
+      {/* Hue Bridge */}
+      <HUDCard title="Philips Hue Bridge" accent={hue.connected ? C.green : C.cyan}>
+        {hue.connected ? (
+          <div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+              <div>
+                <StatusDot on={true} label={`Connected — ${hue.lights.length} lights`} />
+                <div style={{ fontSize:11, color:C.dim, marginTop:4 }}>{hue.bridgeIp}</div>
+              </div>
+              <HUDBtn variant="danger" onClick={() => { setHue({ connected:false, bridgeIp:"", username:"", lights:[] }); notify("Disconnected","success"); }}>
+                Disconnect
+              </HUDBtn>
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {hue.lights.map(l => (
+                <div key={l.id} style={{ padding:"4px 10px", borderRadius:4, fontSize:11,
+                  background:"rgba(0,255,153,0.07)", border:`1px solid ${C.green}33`, color:C.green }}>
+                  {l.name}
                 </div>
               ))}
-              {RECIPES.filter(r => r.cal <= calLeft + 50 && r.protein >= 30).length === 0 && (
-                <div style={{ color: "#6b6b8a", fontSize: 13 }}>You've hit your targets for today 🎯</div>
-              )}
             </div>
-          </>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.5 }}>
+              Find your bridge IP at <span style={{ color:C.cyan }}>discovery.meethue.com</span> and generate a username via the Hue app developer tools.
+            </div>
+            <HUDInput label="Bridge IP" placeholder="192.168.x.x" value={hueInp.ip}
+              onChange={e=>setHueInp({...hueInp, ip:e.target.value})} />
+            <HUDInput label="API Key / Username" placeholder="your-hue-api-key" value={hueInp.username}
+              onChange={e=>setHueInp({...hueInp, username:e.target.value})} />
+            <HUDBtn variant="primary" onClick={connectHue}>Connect Bridge</HUDBtn>
+          </div>
         )}
+      </HUDCard>
 
-        {tab === "environment" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Hue Bridge connection</div>
-              {hue.connected ? (
-                <div>
-                  <div style={{ color: "#10b981", fontSize: 13, marginBottom: 12 }}>● Connected to {hue.bridgeIp} — {hue.lights.length} lights</div>
-                  <button style={styles.btn("danger")} onClick={() => { setHue(MOCK_HUE_STATE); notify("Disconnected"); }}>Disconnect</button>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: 12, color: "#6b6b8a", marginBottom: 12 }}>Enter your Hue Bridge IP and username to control lights. Find your IP at <span style={{ color: "#a78bfa" }}>discovery.meethue.com</span></div>
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>BRIDGE IP</div>
-                    <input style={styles.input} placeholder="192.168.x.x" value={hueInput.ip} onChange={e => setHueInput({...hueInput, ip: e.target.value})} />
-                  </div>
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>USERNAME (API KEY)</div>
-                    <input style={styles.input} placeholder="your-hue-api-key" value={hueInput.username} onChange={e => setHueInput({...hueInput, username: e.target.value})} />
-                  </div>
-                  <button style={styles.btn("primary")} onClick={connectHue}>Connect Bridge</button>
-                </div>
-              )}
+      {/* Automation Schedule */}
+      <HUDCard title="Automation Schedule">
+        {[
+          { time:"Morning",    action:"Wake Up lighting scene activates",               icon:"☀️" },
+          { time:"4:30 PM",    action:"Pre-workout reminder + Training scene (train days)", icon:"⚡" },
+          { time:"11:00 PM",   action:"Wind Down scene activates",                      icon:"🌙" },
+          { time:"Sunday",     action:"Meal Prep mode + Bagel Pub reminder",            icon:"🥯" },
+          { time:"Wednesday",  action:"Smash Burger Night reminder",                    icon:"🍔" },
+        ].map((a, i) => (
+          <div key={i} style={{ display:"flex", gap:12, alignItems:"flex-start", padding:"8px 0",
+            borderBottom: i < 4 ? `1px solid ${C.borderDim}` : "none" }}>
+            <div style={{ fontSize:18, minWidth:24 }}>{a.icon}</div>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{a.action}</div>
+              <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{a.time}</div>
             </div>
+          </div>
+        ))}
+        <div style={{ marginTop:10, fontSize:11, color:C.dim, padding:"8px 12px",
+          background:"rgba(0,212,255,0.04)", borderRadius:4, lineHeight:1.5 }}>
+          Set these up in Apple Shortcuts for background automation. JARVIS scenes run on demand and Shortcuts execute them automatically.
+        </div>
+      </HUDCard>
+    </>
+  );
+}
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Lighting scenes</div>
-              <div style={styles.sceneGrid}>
-                {LIGHTING_SCENES.map(s => (
-                  <button key={s.id} style={styles.sceneBtn(false, sceneLoading === s.id)} onClick={() => applyScene(s)}>
-                    <div style={{ fontSize: 24, marginBottom: 6 }}>{s.icon}</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#c8c8e0", marginBottom: 3 }}>{s.label}</div>
-                    <div style={{ fontSize: 11, color: "#6b6b8a" }}>{s.desc}</div>
-                  </button>
+// ─── RECIPES TAB ───────────────────────────────────────────────────────────────
+function RecipesTab() {
+  const [f, setF] = useState({ search:"", meal:"all", cuisine:"all", maxCal:800 });
+  const cuisines = [...new Set(RECIPES.map(r=>r.cuisine))].sort();
+
+  const filtered = RECIPES.filter(r => {
+    const mS = r.name.toLowerCase().includes(f.search.toLowerCase()) || r.tags.some(t=>t.includes(f.search.toLowerCase()));
+    const mM = f.meal==="all" || r.meal.includes(parseInt(f.meal));
+    const mC = f.cuisine==="all" || r.cuisine===f.cuisine;
+    return mS && mM && mC && r.cal <= f.maxCal;
+  });
+
+  const sel = { background:"rgba(0,212,255,0.05)", border:`1px solid ${C.border}`, borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none" };
+
+  return (
+    <>
+      <HUDCard title={`KRANK Library — ${RECIPES.length} Recipes`}>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <input placeholder="Search recipes or tags..." value={f.search}
+            onChange={e=>setF({...f,search:e.target.value})}
+            style={{ width:"100%", background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
+              borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" }} />
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <select style={sel} value={f.meal} onChange={e=>setF({...f,meal:e.target.value})}>
+              <option value="all">All meals</option>
+              {[1,2,3,4,5].map(n=><option key={n} value={n}>Meal {n}</option>)}
+            </select>
+            <select style={sel} value={f.cuisine} onChange={e=>setF({...f,cuisine:e.target.value})}>
+              <option value="all">All cuisines</option>
+              {cuisines.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:5 }}>
+              MAX CALORIES: <span style={{ color:C.cyan }}>{f.maxCal}</span>
+            </div>
+            <input type="range" min={100} max={800} step={50} value={f.maxCal}
+              onChange={e=>setF({...f,maxCal:parseInt(e.target.value)})}
+              style={{ width:"100%", accentColor:C.cyan }} />
+          </div>
+        </div>
+      </HUDCard>
+
+      <div style={{ fontSize:11, color:C.dim, letterSpacing:"0.1em", marginBottom:12 }}>
+        {filtered.length} RECIPES SHOWN
+      </div>
+
+      {filtered.map(r => (
+        <div key={r.id} style={{ background:"rgba(0,212,255,0.02)", border:`1px solid ${C.borderDim}`,
+          borderRadius:4, padding:"14px 16px", marginBottom:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+            <div style={{ flex:1 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                <span style={{ fontSize:10, color:C.dim, fontWeight:700 }}>#{r.id}</span>
+                <span style={{ fontSize:14, fontWeight:600, color:C.text }}>{r.name}</span>
+              </div>
+              <div style={{ fontSize:11, color:C.dim, marginBottom:8 }}>
+                <span style={{ color:C.green }}>{r.protein}g P</span> · {r.carbs}g C · {r.fat}g F · {r.time}min · Meal {r.meal.join("/")}
+              </div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                {r.tags.map(t => (
+                  <span key={t} style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
+                    background:"rgba(0,212,255,0.08)", color:C.cyan, border:`1px solid ${C.border}` }}>
+                    {t}
+                  </span>
                 ))}
+                <span style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
+                  background:"rgba(139,92,246,0.08)", color:C.purple, border:`1px solid ${C.purple}44` }}>
+                  {r.cuisine}
+                </span>
               </div>
             </div>
-
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Coffee maker</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#e8e8f0" }}>Smart Plug</div>
-                  <div style={{ fontSize: 12, color: "#6b6b8a", marginTop: 2 }}>TP-Link Tapo / Smart plug</div>
-                </div>
-                <button style={{ ...styles.btn(coffeeOn ? "success" : "default"), minWidth: 90 }} onClick={toggleCoffee}>
-                  {coffeeOn ? "☕ On" : "Off"}
-                </button>
-              </div>
-              <div style={styles.separator} />
-              <div style={{ fontSize: 12, color: "#6b6b8a" }}>Connect your Tapo plug via the Tapo app, then integrate with HomeKit to enable full automation.</div>
+            <div style={{ textAlign:"right", marginLeft:16 }}>
+              <div style={{ fontSize:20, fontWeight:700, color:C.cyan }}>{r.cal}</div>
+              <div style={{ fontSize:10, color:C.dim }}>cal</div>
             </div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
 
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Automation schedule</div>
-              {[
-                { time: "Morning", trigger: "On wake", action: "Wake Up lighting scene", icon: "☀️" },
-                { time: "4:30 PM", trigger: "Training days", action: "Pre-workout reminder + Training scene", icon: "⚡" },
-                { time: "11:00 PM", trigger: "Daily", action: "Wind Down scene activates", icon: "🌙" },
-                { time: "Sunday", trigger: "Weekly", action: "Meal Prep mode + Bagel Pub reminder", icon: "🥯" },
-                { time: "Wednesday", trigger: "Weekly", action: "Smash Burger Night reminder", icon: "🍔" },
-              ].map((a, i) => (
-                <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
-                  <div style={{ fontSize: 18, minWidth: 24 }}>{a.icon}</div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#c8c8e0" }}>{a.action}</div>
-                    <div style={{ fontSize: 11, color: "#6b6b8a", marginTop: 2 }}>{a.time} · {a.trigger}</div>
-                  </div>
-                </div>
-              ))}
-              <div style={{ fontSize: 12, color: "#6b6b8a", marginTop: 4, padding: "8px 10px", background: "rgba(167,139,250,0.06)", borderRadius: 8 }}>
-                Set these up in Apple Shortcuts for background automation. Jarvis scenes fire on demand — Shortcuts run them automatically.
-              </div>
+// ─── BODY TAB ─────────────────────────────────────────────────────────────────
+function BodyTab({ measurements, setMeasurements, notify }) {
+  const [inp, setInp] = useState({ weight:"", waist:"" });
+  const lw  = measurements.weight.slice(-1)[0]?.val;
+  const lwa = measurements.waist.slice(-1)[0]?.val;
+
+  const save = () => {
+    const w = parseFloat(inp.weight), wa = parseFloat(inp.waist);
+    const date = new Date().toLocaleDateString();
+    const m = { ...measurements };
+    if (w)  m.weight = [...measurements.weight,  { date, val:w  }].slice(-30);
+    if (wa) m.waist  = [...measurements.waist,   { date, val:wa }].slice(-30);
+    setMeasurements(m);
+    setInp({ weight:"", waist:"" });
+    notify("Measurements saved", "success");
+  };
+
+  const waistTarget = 82.5;
+  const waistPct = lwa ? Math.max(0, Math.min(100, (1 - Math.max(0, lwa - waistTarget)/10)*100)) : 0;
+
+  return (
+    <>
+      <HUDCard title="Log Measurements">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+          <HUDInput label="Weight (lbs)" type="number" placeholder="0" value={inp.weight}
+            onChange={e=>setInp({...inp,weight:e.target.value})} style={{ marginBottom:0 }} />
+          <HUDInput label="Waist (cm)" type="number" placeholder="0" value={inp.waist}
+            onChange={e=>setInp({...inp,waist:e.target.value})} style={{ marginBottom:0 }} />
+        </div>
+        <HUDBtn variant="primary" onClick={save}>Save Measurements</HUDBtn>
+      </HUDCard>
+
+      <HUDCard title="Waist Goal Tracker" accent={lwa && lwa <= 84 ? C.green : C.orange}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:10 }}>
+          <div>
+            <span style={{ fontSize:32, fontWeight:700, color: lwa && lwa <= 84 ? C.green : lwa ? C.orange : C.text }}>
+              {lwa || "—"}
+            </span>
+            <span style={{ fontSize:13, color:C.dim, marginLeft:4 }}>cm</span>
+          </div>
+          <div style={{ fontSize:12, color:C.dim }}>Target: 81–84 cm</div>
+        </div>
+        {lwa && (
+          <>
+            <GlowBar pct={waistPct} color={lwa <= 84 ? C.green : C.orange} height={6} />
+            <div style={{ fontSize:12, color:C.dim, marginTop:8 }}>
+              {lwa <= 81 ? `✅ In target range — ${(lwa-81).toFixed(1)}cm above lower bound`
+               : lwa <= 84 ? "✅ In target range"
+               : `${(lwa-84).toFixed(1)}cm above target upper bound`}
             </div>
           </>
         )}
+      </HUDCard>
 
-        {tab === "recipes" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>KRANK recipe library — {RECIPES.length} recipes</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <input style={styles.input} placeholder="Search recipes or tags..." value={recipeFilter.search} onChange={e => setRecipeFilter({...recipeFilter, search: e.target.value})} />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <select style={styles.select} value={recipeFilter.meal} onChange={e => setRecipeFilter({...recipeFilter, meal: e.target.value})}>
-                    <option value="all">All meals</option>
-                    <option value="1">Meal 1</option>
-                    <option value="2">Meal 2</option>
-                    <option value="3">Meal 3</option>
-                    <option value="4">Meal 4</option>
-                  </select>
-                  <select style={styles.select} value={recipeFilter.cuisine} onChange={e => setRecipeFilter({...recipeFilter, cuisine: e.target.value})}>
-                    <option value="all">All cuisines</option>
-                    {cuisines.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>MAX CALORIES: {recipeFilter.maxCal}</div>
-                  <input type="range" min={100} max={800} step={50} value={recipeFilter.maxCal} onChange={e => setRecipeFilter({...recipeFilter, maxCal: parseInt(e.target.value)})} style={{ width: "100%", accentColor: "#a78bfa" }} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, color: "#6b6b8a", marginBottom: 12 }}>{filteredRecipes.length} recipes shown</div>
-
-            {filteredRecipes.map(r => (
-              <div key={r.id} style={styles.recipeCard}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: "#6b6b8a", fontWeight: 600 }}>#{r.id}</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: "#e8e8f0" }}>{r.name}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#6b6b8a", marginBottom: 8 }}>
-                      {r.protein}g P · {r.carbs}g C · {r.fat}g F · {r.time}min · Meal {r.meal.join("/")}
-                    </div>
-                    <div>{r.tags.map(t => <span key={t} style={styles.tag}>{t}</span>)}</div>
-                  </div>
-                  <div style={{ textAlign: "right", marginLeft: 12 }}>
-                    <div style={{ fontSize: 18, fontWeight: 600, color: "#a78bfa" }}>{r.cal}</div>
-                    <div style={{ fontSize: 10, color: "#6b6b8a" }}>cal</div>
-                  </div>
-                </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+        {measurements.weight.length > 0 && (
+          <HUDCard title="Weight History">
+            {[...measurements.weight].reverse().slice(0,10).map((m,i) => (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between",
+                padding:"6px 0", borderBottom:`1px solid ${C.borderDim}`, fontSize:12 }}>
+                <span style={{ color:C.dim }}>{m.date}</span>
+                <span style={{ fontWeight:600, color:C.text }}>{m.val} lbs</span>
               </div>
             ))}
-          </>
+          </HUDCard>
         )}
-
-        {tab === "body" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Log measurements</div>
-              <div style={styles.grid2}>
-                <div>
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>WEIGHT (lbs)</div>
-                  <input style={styles.input} type="number" placeholder="0" value={measureInput.weight} onChange={e => setMeasureInput({...measureInput, weight: e.target.value})} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>WAIST (cm)</div>
-                  <input style={styles.input} type="number" placeholder="0" value={measureInput.waist} onChange={e => setMeasureInput({...measureInput, waist: e.target.value})} />
-                </div>
+        {measurements.waist.length > 0 && (
+          <HUDCard title="Waist History">
+            {[...measurements.waist].reverse().slice(0,10).map((m,i) => (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between",
+                padding:"6px 0", borderBottom:`1px solid ${C.borderDim}`, fontSize:12 }}>
+                <span style={{ color:C.dim }}>{m.date}</span>
+                <span style={{ fontWeight:600, color:m.val<=84?C.green:C.orange }}>{m.val} cm</span>
               </div>
-              <button style={{ ...styles.btn("primary"), marginTop: 14 }} onClick={logMeasurement}>Save</button>
-            </div>
-
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Waist goal tracker</div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-                <div><span style={{ fontSize: 28, fontWeight: 600, color: "#e8e8f0" }}>{latestWaist || "—"}</span><span style={{ fontSize: 13, color: "#6b6b8a" }}> cm</span></div>
-                <div style={{ fontSize: 13, color: "#6b6b8a" }}>Target 81–84cm</div>
-              </div>
-              {latestWaist && (
-                <>
-                  <div style={styles.waistBar}>
-                    <div style={{ width: `${waistPct}%`, height: "100%", background: latestWaist <= 84 ? "#10b981" : "#f59e0b", borderRadius: 4, transition: "width 0.5s" }} />
-                  </div>
-                  <div style={{ fontSize: 12, color: "#6b6b8a", marginTop: 6 }}>
-                    {latestWaist <= 81 ? "✅ In target range!" : latestWaist <= 84 ? "✅ In target range" : `${(latestWaist - 84).toFixed(1)}cm above target`}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {measurements.weight.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.cardTitle}>Weight history (last 10)</div>
-                {[...measurements.weight].reverse().slice(0, 10).map((m, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <span style={{ fontSize: 13, color: "#6b6b8a" }}>{m.date}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#e8e8f0" }}>{m.val} lbs</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {measurements.waist.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.cardTitle}>Waist history (last 10)</div>
-                {[...measurements.waist].reverse().slice(0, 10).map((m, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <span style={{ fontSize: 13, color: "#6b6b8a" }}>{m.date}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: m.val <= 84 ? "#10b981" : "#f59e0b" }}>{m.val} cm</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+            ))}
+          </HUDCard>
         )}
-
-        {tab === "sleep" && (
-          <>
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Log sleep</div>
-              <div style={styles.grid2}>
-                <div>
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>HOURS SLEPT</div>
-                  <input style={styles.input} type="number" step="0.5" placeholder="7.5" value={sleepInput.hours} onChange={e => setSleepInput({...sleepInput, hours: e.target.value})} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: "#6b6b8a", marginBottom: 4 }}>BEDTIME</div>
-                  <input style={styles.input} type="time" value={sleepInput.bedtime} onChange={e => setSleepInput({...sleepInput, bedtime: e.target.value})} />
-                </div>
-              </div>
-              <button style={{ ...styles.btn("primary"), marginTop: 14 }} onClick={logSleep}>Log Sleep</button>
-            </div>
-
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Sleep overview</div>
-              <div style={styles.grid3}>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>7-DAY AVG</div>
-                  <div><span style={{ ...styles.metricValue, color: avgSleep >= 7 ? "#10b981" : "#ef4444" }}>{avgSleep || "—"}</span><span style={styles.metricUnit}>hrs</span></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>DEBT</div>
-                  <div><span style={{ ...styles.metricValue, color: sleepDebt > 5 ? "#ef4444" : "#e8e8f0" }}>{sleepDebt || "—"}</span><span style={styles.metricUnit}>hrs</span></div>
-                </div>
-                <div style={styles.metricCard}>
-                  <div style={styles.metricLabel}>ENTRIES</div>
-                  <div><span style={styles.metricValue}>{sleep.length}</span></div>
-                </div>
-              </div>
-            </div>
-
-            {sleep.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.cardTitle}>Recent sleep log</div>
-                {[...sleep].reverse().slice(0, 10).map((s, i) => (
-                  <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <div>
-                      <span style={{ fontSize: 13, color: "#6b6b8a" }}>{s.date}</span>
-                      {s.bedtime && <span style={{ fontSize: 12, color: "#6b6b8a", marginLeft: 8 }}>Bed: {s.bedtime}</span>}
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: s.hours >= 7 ? "#10b981" : s.hours >= 6 ? "#f59e0b" : "#ef4444" }}>{s.hours}h</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={styles.card}>
-              <div style={styles.cardTitle}>Sleep optimization tips</div>
-              {[
-                { tip: "Wind Down lighting at 11pm", detail: "Warm amber light triggers melatonin. Use the scene in Home tab." },
-                { tip: "Blackout curtains", detail: "South-facing window + 4am bedtime = brutal without them. Priority purchase." },
-                { tip: "Target bedtime: 12am", detail: "Shifting from 4am to midnight adds 4hrs sleep debt recovery weekly." },
-              ].map((t, i) => (
-                <div key={i} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#c8c8e0" }}>{t.tip}</div>
-                  <div style={{ fontSize: 12, color: "#6b6b8a", marginTop: 3 }}>{t.detail}</div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
       </div>
+    </>
+  );
+}
+
+// ─── SLEEP TAB ────────────────────────────────────────────────────────────────
+function SleepTab({ sleep, setSleep, notify }) {
+  const [inp, setInp] = useState({ hours:"", bedtime:"" });
+  const avgS = sleep.length ? (sleep.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sleep.length,7)).toFixed(1) : null;
+  const debt = avgS ? Math.max(0,(8-parseFloat(avgS))*7).toFixed(1) : null;
+
+  const log = () => {
+    const h = parseFloat(inp.hours);
+    if (!h) { notify("Enter sleep hours", "error"); return; }
+    setSleep([...sleep, { date:new Date().toLocaleDateString(), hours:h, bedtime:inp.bedtime }].slice(-30));
+    setInp({ hours:"", bedtime:"" });
+    notify("Sleep logged", "success");
+  };
+
+  return (
+    <>
+      <HUDCard title="Log Sleep">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+          <HUDInput label="Hours Slept" type="number" step="0.5" placeholder="7.5"
+            value={inp.hours} onChange={e=>setInp({...inp,hours:e.target.value})} style={{ marginBottom:0 }} />
+          <HUDInput label="Bedtime" type="time"
+            value={inp.bedtime} onChange={e=>setInp({...inp,bedtime:e.target.value})} style={{ marginBottom:0 }} />
+        </div>
+        <HUDBtn variant="primary" onClick={log}>Log Sleep</HUDBtn>
+      </HUDCard>
+
+      <HUDCard title="Sleep Overview">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+          <Metric label="7-Day Avg" value={avgS||"—"} unit="hrs"
+            color={!avgS?C.text:parseFloat(avgS)>=7?C.green:parseFloat(avgS)>=6?C.yellow:C.red} />
+          <Metric label="Sleep Debt" value={debt||"—"} unit="hrs"
+            color={!debt?C.text:parseFloat(debt)>5?C.red:parseFloat(debt)>2?C.yellow:C.green} />
+          <Metric label="Entries" value={sleep.length} color={C.text} />
+        </div>
+      </HUDCard>
+
+      {sleep.length > 0 && (
+        <HUDCard title="Sleep Log">
+          {[...sleep].reverse().slice(0,14).map((s,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"7px 0", borderBottom:`1px solid ${C.borderDim}`, fontSize:12 }}>
+              <div>
+                <span style={{ color:C.dim }}>{s.date}</span>
+                {s.bedtime && <span style={{ color:C.dim, marginLeft:10 }}>Bed {s.bedtime}</span>}
+              </div>
+              <span style={{ fontWeight:600, color:s.hours>=7?C.green:s.hours>=6?C.yellow:C.red }}>
+                {s.hours}h
+              </span>
+            </div>
+          ))}
+        </HUDCard>
+      )}
+
+      <HUDCard title="Optimization Protocol">
+        {[
+          { tip:"Wind Down Lighting at 11pm", detail:"Warm amber triggers melatonin onset. Use the scene in the Home tab, or say 'Set lights to wind down'." },
+          { tip:"Blackout Curtains",          detail:"South-facing window + any bedtime before 6am needs them. Priority acquisition." },
+          { tip:"Target Bedtime: 12am",       detail:"Every hour shifted from 4am to midnight recovers ~4hrs weekly sleep debt. Compound effect is significant." },
+        ].map((t,i) => (
+          <div key={i} style={{ marginBottom:i<2?14:0, paddingBottom:i<2?14:0, borderBottom:i<2?`1px solid ${C.borderDim}`:"none" }}>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:3 }}>{t.tip}</div>
+            <div style={{ fontSize:12, color:C.dim, lineHeight:1.55 }}>{t.detail}</div>
+          </div>
+        ))}
+      </HUDCard>
+    </>
+  );
+}
+
+// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
+function SettingsTab({ jarvis, spotify, calendar }) {
+  const [show, setShow] = useState({ claude:false, spotify:false, gcal:false });
+  const toggle = k => setShow(s => ({ ...s, [k]:!s[k] }));
+
+  const Section = ({ id, title, status, children }) => (
+    <HUDCard style={{ marginBottom:10 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}
+        onClick={()=>toggle(id)}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{title}</div>
+          <div style={{ fontSize:11, color:status.ok?C.green:C.dim, marginTop:2 }}>{status.label}</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <StatusDot on={status.ok} label="" />
+          <span style={{ color:C.dim, fontSize:16 }}>{show[id]?"▲":"▼"}</span>
+        </div>
+      </div>
+      {show[id] && <div style={{ marginTop:16, borderTop:`1px solid ${C.borderDim}`, paddingTop:16 }}>{children}</div>}
+    </HUDCard>
+  );
+
+  return (
+    <>
+      <div style={{ fontSize:10, letterSpacing:"0.15em", color:C.dim, marginBottom:16 }}>◆ SYSTEM CONFIGURATION</div>
+
+      {/* Claude / AI */}
+      <Section id="claude" title="Claude AI Brain"
+        status={{ ok:!!jarvis.apiKey, label:jarvis.apiKey?"API key configured":"API key required for voice commands" }}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          Get your API key at <span style={{ color:C.cyan }}>console.anthropic.com</span> → API Keys.<br/>
+          For Vercel production, set <span style={{ color:C.cyan }}>ANTHROPIC_API_KEY</span> as an environment variable in your Vercel project settings.<br/>
+          For local dev, enter your key below — it's sent directly to Anthropic's API.
+        </div>
+        <HUDInput label="Anthropic API Key" type="password" placeholder="sk-ant-..."
+          value={jarvis.apiKey} onChange={e=>jarvis.setApiKey(e.target.value)} />
+        <div style={{ fontSize:11, color:C.dim, marginTop:-6 }}>Stored in localStorage. Never logged or sent anywhere except Anthropic.</div>
+      </Section>
+
+      {/* Spotify */}
+      <Section id="spotify" title="Spotify"
+        status={{ ok:spotify.connected, label:spotify.connected?"Connected":"Not connected" }}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          1. Go to <span style={{ color:C.cyan }}>developer.spotify.com/dashboard</span><br/>
+          2. Create an app → Settings → Add redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          3. Copy the Client ID and paste below
+        </div>
+        <HUDInput label="Spotify Client ID" placeholder="your-spotify-client-id"
+          value={spotify.clientId} onChange={e=>spotify.setClientId(e.target.value)} />
+        {spotify.connected
+          ? <div style={{ display:"flex", gap:8 }}>
+              <HUDBtn variant="danger" onClick={spotify.disconnect}>Disconnect Spotify</HUDBtn>
+            </div>
+          : <HUDBtn variant="primary" onClick={spotify.login} disabled={!spotify.clientId}>Connect Spotify</HUDBtn>
+        }
+      </Section>
+
+      {/* Google Calendar */}
+      <Section id="gcal" title="Google Calendar"
+        status={{ ok:calendar.connected, label:calendar.connected?"Connected":"Not connected" }}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          1. Go to <span style={{ color:C.cyan }}>console.cloud.google.com</span> → Create project<br/>
+          2. Enable <strong style={{ color:C.text }}>Google Calendar API</strong><br/>
+          3. OAuth consent screen → External → Add your email as test user<br/>
+          4. Credentials → Create → Web application<br/>
+          5. Add redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          6. Copy Client ID below — no secret needed
+        </div>
+        <HUDInput label="Google OAuth Client ID" placeholder="your-client-id.apps.googleusercontent.com"
+          value={calendar.clientId} onChange={e=>calendar.setClientId(e.target.value)} />
+        {calendar.connected
+          ? <HUDBtn variant="danger" onClick={calendar.disconnect}>Disconnect Calendar</HUDBtn>
+          : <HUDBtn variant="primary" onClick={calendar.login} disabled={!calendar.clientId}>Connect Google Calendar</HUDBtn>
+        }
+        <div style={{ fontSize:11, color:C.dim, marginTop:10 }}>Token expires in 1 hour — reconnect as needed.</div>
+      </Section>
+
+      {/* About */}
+      <HUDCard title="System Info">
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {[
+            ["AI Model",      "Claude Haiku"],
+            ["Voice STT",     "Web Speech API"],
+            ["Voice TTS",     "SpeechSynthesis"],
+            ["Weather",       "Open-Meteo"],
+            ["Music",         spotify.connected?"Spotify ●":"Spotify ○"],
+            ["Calendar",      calendar.connected?"Google ●":"Google ○"],
+          ].map(([k,v]) => (
+            <div key={k} style={{ padding:"8px 0", borderBottom:`1px solid ${C.borderDim}` }}>
+              <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", textTransform:"uppercase" }}>{k}</div>
+              <div style={{ fontSize:13, color:C.text, marginTop:2 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </HUDCard>
+    </>
+  );
+}
+
+// ─── FLOATING ORB ─────────────────────────────────────────────────────────────
+function FloatingOrb({ jarvis }) {
+  const state = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
+  return (
+    <div style={{ position:"fixed", bottom:20, right:20, zIndex:200 }}>
+      <button onClick={jarvis.listening ? jarvis.stopListening : jarvis.startListening}
+        style={{ background:"none", border:"none", cursor:"pointer", padding:0, display:"block" }}
+        title="Talk to JARVIS">
+        <ArcReactor size={48} state={state} />
+      </button>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function Jarvis() {
+  const [tab,           setTab]          = useState("briefing");
+  const [macros,        setMacros]       = useLocalStorage("jarvis_macros",       { cal:0, protein:0, carbs:0, fat:0 });
+  const [measurements,  setMeasurements] = useLocalStorage("jarvis_measurements", { weight:[], waist:[] });
+  const [sleep,         setSleep]        = useLocalStorage("jarvis_sleep",        []);
+  const [hue,           setHue]          = useLocalStorage("jarvis_hue",          { connected:false, bridgeIp:"", username:"", lights:[] });
+  const [coffeeOn,      setCoffeeOn]     = useLocalStorage("jarvis_coffee",       false);
+  const [sceneLoading,  setSceneLoading] = useState(null);
+  const [notification,  setNotification] = useState(null);
+
+  const spotify  = useSpotify();
+  const calendar = useCalendar();
+  const weather  = useWeather();
+
+  const notify = useCallback((msg, type = "success") => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3200);
+  }, []);
+
+  // Handle OAuth callbacks on mount
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const code  = p.get("code");
+    const state = p.get("state");
+    if (code && state) {
+      window.history.replaceState({}, "", window.location.pathname);
+      if (state === "spotify") spotify.handleCallback(code).catch(()=>{});
+      if (state === "gcal")    calendar.handleCallback(code).catch(()=>{});
+    }
+  }, []);
+
+  const callHueApi = async (path, method = "GET", body = null) => {
+    if (!hue.bridgeIp || !hue.username) return null;
+    const opts = { method, headers: { "Content-Type":"application/json" } };
+    if (body) opts.body = JSON.stringify(body);
+    try { return await fetch(`http://${hue.bridgeIp}/api/${hue.username}${path}`, opts).then(r=>r.json()); }
+    catch { return null; }
+  };
+
+  const applyScene = useCallback(async (scene) => {
+    setSceneLoading(scene.id);
+    if (hue.connected && hue.lights.length > 0) {
+      await Promise.all(hue.lights.map(l =>
+        callHueApi(`/lights/${l.id}/state`, "PUT", { on:scene.bri>0, bri:scene.bri, ct:scene.ct, transitiontime:10 })
+      ));
+      notify(`${scene.label} scene activated`, "success");
+    } else {
+      await new Promise(r => setTimeout(r, 500));
+      notify(`${scene.label} — connect Hue Bridge to control lights`, "success");
+    }
+    setSceneLoading(null);
+  }, [hue]);
+
+  const handleAction = useCallback(async (action) => {
+    switch (action.type) {
+      case "lighting": {
+        const s = LIGHTING_SCENES.find(x => x.id === action.scene);
+        if (s) applyScene(s);
+        break;
+      }
+      case "spotify":
+        spotify.control(action.cmd);
+        break;
+      case "log_macros":
+        setMacros(m => ({
+          cal:     m.cal     + (action.cal     || 0),
+          protein: m.protein + (action.protein || 0),
+          carbs:   m.carbs   + (action.carbs   || 0),
+          fat:     m.fat     + (action.fat     || 0),
+        }));
+        notify("Macros logged by JARVIS", "success");
+        break;
+      case "reset_macros":
+        setMacros({ cal:0, protein:0, carbs:0, fat:0 });
+        break;
+      case "coffee":
+        setCoffeeOn(action.on);
+        notify(action.on ? "☕ Coffee maker on" : "Coffee maker off", "success");
+        break;
+    }
+  }, [applyScene, spotify, setMacros, setCoffeeOn]);
+
+  const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, onAction:handleAction });
+
+  const TABS = [
+    ["briefing",    "Briefing"  ],
+    ["macros",      "Macros"    ],
+    ["environment", "Home"      ],
+    ["recipes",     "Recipes"   ],
+    ["body",        "Body"      ],
+    ["sleep",       "Sleep"     ],
+    ["settings",    "Settings"  ],
+  ];
+
+  const training = isTrainingDay();
+
+  return (
+    <div style={{ fontFamily:"'DM Sans','SF Pro Display',system-ui,sans-serif", minHeight:"100vh", background:C.bg, color:C.text }}>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      {/* HUD visual effects */}
+      <div className="hud-scanlines" />
+      <div className="hud-scan-beam" />
+
+      {/* Toast notification */}
+      {notification && (
+        <div style={{
+          position:"fixed", bottom:80, left:"50%", transform:"translateX(-50%)",
+          padding:"10px 20px", borderRadius:6, fontSize:13, fontWeight:600, zIndex:300,
+          whiteSpace:"nowrap", animation:"notification-in 0.3s ease",
+          background: notification.type==="error" ? "rgba(255,34,85,0.15)" : "rgba(0,255,153,0.1)",
+          border: `1px solid ${notification.type==="error" ? C.red+"55" : C.green+"55"}`,
+          color: notification.type==="error" ? C.red : C.green,
+          boxShadow: `0 0 20px ${notification.type==="error" ? C.red : C.green}22`,
+        }}>
+          {notification.msg}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ borderBottom:`1px solid ${C.borderDim}`, background:"rgba(0,8,20,0.97)", position:"sticky", top:0, zIndex:100 }}>
+        <div style={{ padding:"12px 20px 0", maxWidth:760, margin:"0 auto" }}>
+          {/* Top row */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+              <ArcReactor size={36}
+                state={jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle"} />
+              <div>
+                <div style={{ fontSize:10, letterSpacing:"0.25em", color:C.cyan, fontWeight:700, opacity:0.8 }}>J.A.R.V.I.S</div>
+                <div style={{ fontSize:11, color:C.dim }}>Just A Rather Very Intelligent System</div>
+              </div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:11, color: training ? C.orange : C.dim, fontWeight:600 }}>
+                {training ? "⚡ TRAINING DAY" : isRestDay() ? "😴 REST DAY" : "● ACTIVE DAY"}
+              </div>
+              <div style={{ display:"flex", gap:8, marginTop:4, justifyContent:"flex-end" }}>
+                <StatusDot on={spotify.connected}  label="Spotify"  />
+                <StatusDot on={calendar.connected} label="Calendar" />
+                <StatusDot on={hue.connected}      label="Hue"      />
+              </div>
+            </div>
+          </div>
+
+          {/* Macro pills */}
+          <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+            {[
+              { label:`${Math.round(TARGET_CAL - macros.cal)} cal left`, color: macros.cal >= TARGET_CAL ? C.orange : C.cyan },
+              { label:`${Math.round(TARGET_PROTEIN - macros.protein)}g protein left`, color: macros.protein >= TARGET_PROTEIN ? C.orange : C.green },
+              weather.data && { label:`${Math.round(weather.data.temperature_2m)}°F ${wxEmoji(weather.data.weather_code)}`, color:C.blue },
+              { label:`${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}`, color:C.dim },
+            ].filter(Boolean).map((p, i) => (
+              <span key={i} style={{ padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+                background:`${p.color}18`, color:p.color, border:`1px solid ${p.color}33` }}>
+                {p.label}
+              </span>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display:"flex", gap:0, overflowX:"auto", scrollbarWidth:"none" }}>
+            {TABS.map(([id, label]) => (
+              <button key={id} onClick={()=>setTab(id)} style={{
+                padding:"10px 15px", fontSize:12, fontWeight: tab===id ? 700 : 500,
+                color: tab===id ? C.cyan : C.dim,
+                borderBottom: tab===id ? `2px solid ${C.cyan}` : "2px solid transparent",
+                background:"none", border:"none", borderBottom: tab===id ? `2px solid ${C.cyan}` : "2px solid transparent",
+                cursor:"pointer", whiteSpace:"nowrap", letterSpacing:"0.04em",
+                transition:"color 0.2s",
+                textShadow: tab===id ? `0 0 8px ${C.cyan}88` : "none",
+              }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding:"20px 20px 100px", maxWidth:760, margin:"0 auto" }}>
+        {tab==="briefing"    && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} />}
+        {tab==="macros"      && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
+        {tab==="environment" && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
+        {tab==="recipes"     && <RecipesTab />}
+        {tab==="body"        && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
+        {tab==="sleep"       && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
+        {tab==="settings"    && <SettingsTab jarvis={jarvis} spotify={spotify} calendar={calendar} />}
+      </div>
+
+      {/* Floating orb (non-briefing tabs) */}
+      {tab !== "briefing" && <FloatingOrb jarvis={jarvis} />}
     </div>
   );
 }

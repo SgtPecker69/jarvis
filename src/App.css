@@ -1,0 +1,84 @@
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.45); }
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
+
+@keyframes arc-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+@keyframes arc-pulse-ring {
+  0%, 100% { box-shadow: 0 0 8px rgba(0,212,255,0.4), inset 0 0 4px rgba(0,212,255,0.1); opacity: 0.7; }
+  50% { box-shadow: 0 0 20px rgba(0,212,255,0.7), 0 0 40px rgba(0,212,255,0.3), inset 0 0 8px rgba(0,212,255,0.15); opacity: 1; }
+}
+
+@keyframes arc-core-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes ripple {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scanmove {
+  0% { top: -2px; opacity: 0; }
+  5% { opacity: 1; }
+  95% { opacity: 1; }
+  100% { top: 100vh; opacity: 0; }
+}
+
+@keyframes progress-grow { from { width: 0; } }
+
+@keyframes listening-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(255,50,100,0.5); }
+  50% { box-shadow: 0 0 30px rgba(255,50,100,0.9), 0 0 60px rgba(255,50,100,0.4); }
+}
+
+@keyframes notification-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.arc-spin { animation: arc-spin 2s linear infinite; }
+.arc-pulse-ring { animation: arc-pulse-ring 2.5s ease-in-out infinite; }
+.arc-core-pulse { animation: arc-core-pulse 2.2s ease-in-out infinite; }
+.listening-ring { animation: arc-pulse-ring 1s ease-in-out infinite; }
+.fade-in-up { animation: fadeInUp 0.3s ease forwards; }
+.fade-in { animation: fadeIn 0.25s ease forwards; }
+.progress-bar-fill { animation: progress-grow 0.9s cubic-bezier(0.4,0,0.2,1); }
+
+.hud-scanlines {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 3px,
+    rgba(0, 212, 255, 0.01) 3px, rgba(0, 212, 255, 0.01) 4px
+  );
+  z-index: 9998;
+}
+
+.hud-scan-beam {
+  pointer-events: none;
+  position: fixed;
+  left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0,212,255,0.12) 30%, rgba(0,212,255,0.25) 50%, rgba(0,212,255,0.12) 70%, transparent 100%);
+  z-index: 9997;
+  animation: scanmove 10s linear infinite;
+}
