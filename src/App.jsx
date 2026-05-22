@@ -1270,6 +1270,225 @@ function NowPlaying({ spotify }) {
   );
 }
 
+// ─── JARVIS AI TAB ─────────────────────────────────────────────────────────────
+function JarvisAITab({ macros, measurements, oura, hue, sleep, coffeeOn }) {
+  const [apiKey]            = useLocalStorage("jarvis_api_key", "");
+  const [messages, setMessages] = useState([
+    { role:"assistant", content:"JARVIS online. What do you need?" }
+  ]);
+  const [input,   setInput]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const endRef = useRef(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior:"smooth" });
+  }, [messages, loading]);
+
+  const buildSystemPrompt = useCallback(() => {
+    const today    = new Date();
+    const dayName  = today.toLocaleDateString("en-US", { weekday:"long" });
+    const hour     = today.getHours();
+    const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+    const tStr     = today.toLocaleTimeString("en-US", { hour:"2-digit", minute:"2-digit" });
+
+    const training = isTrainingDay();
+    const rest     = isRestDay();
+    const dayType  = training ? "TRAINING DAY" : rest ? "REST DAY" : "ACTIVE DAY";
+    const ritual   = getTodayRitual();
+
+    const lw  = measurements?.weight?.slice(-1)[0]?.value;
+    const lwa = measurements?.waist?.slice(-1)[0]?.value;
+
+    const oR  = oura?.data?.readiness?.slice(-1)[0];
+    const oSl = oura?.data?.dailySleep?.slice(-1)[0];
+    const oSe = oura?.data?.sessions?.slice(-1)[0];
+    const ouraStr = oura?.connected && oR
+      ? `Readiness ${oR.score}/100 | Sleep score ${oSl?.score ?? "—"}/100 | Last night ${fmtDur(oSe?.total_sleep_duration)} (REM ${fmtDur(oSe?.rem_sleep_duration)}, Deep ${fmtDur(oSe?.deep_sleep_duration)})`
+      : "not connected";
+
+    const avgS = sleep?.length
+      ? (sleep.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sleep.length,7)).toFixed(1)
+      : null;
+
+    const remainCal     = Math.max(0, TARGET_CAL - macros.cal);
+    const remainProtein = Math.max(0, TARGET_PROTEIN - macros.protein);
+
+    const recipeList = RECIPES.map(r =>
+      `  #${r.id} ${r.name} — ${r.cal} cal | ${r.protein}g P | ${r.carbs}g C | ${r.fat}g F | ${r.time}min | ${r.meal.map(m=>["","Breakfast","Lunch","Dinner","Post-workout","Dessert"][m]).join("/")}`
+    ).join("\n");
+
+    return `You are JARVIS — Mark's personal AI assistant for fitness, nutrition, and smart home optimization. Direct, concise, no-BS. You know everything about Mark's goals, schedule, and recipe library.
+
+## NOW: ${dayName} ${tStr} (${timeOfDay}) — ${dayType}${ritual ? `\nToday's ritual: ${ritual}` : ""}
+
+## MACROS TODAY
+Calories: ${macros.cal} / ${TARGET_CAL} kcal — ${remainCal} remaining
+Protein: ${macros.protein}g / ${TARGET_PROTEIN}g — ${remainProtein}g remaining
+Carbs: ${macros.carbs}g | Fat: ${macros.fat}g
+
+## BODY
+Weight: ${lw ? lw + " lbs" : "not logged"} | Waist: ${lwa ? lwa + " cm (target 81-84cm)" : "not logged"}
+7-day avg sleep: ${avgS ? avgS + " hrs" : "no data"}
+Oura Ring: ${ouraStr}
+
+## HOME
+Hue lights: ${hue?.connected ? "connected" : "not connected"} | Coffee: ${coffeeOn ? "ON" : "OFF"}
+
+## MARK'S PROFILE
+Goals: Cut to 81-84cm waist, maintain muscle. Daily targets: ${TARGET_CAL} cal, ${TARGET_PROTEIN}g protein.
+Schedule: Training days Mon/Tue/Wed/Sat. Rest Sun/Thu. Active (cardio) Fri.
+Rituals: Bagel Sunday, Smash Burger Wednesday, McDonald's Saturday.
+
+## KRANK RECIPE LIBRARY
+${recipeList}
+
+## LIGHTING SCENES (voice-activated: "Set lights to [scene]")
+Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sleep · Meal Prep
+
+## RULES
+- Direct and concise. No filler. No "Great question!"
+- Recommend recipes by number and name; show remaining macros after eating.
+- If Oura readiness < 70, flag recovery risk before recommending hard training.
+- Suggest lighting scenes by name when contextually relevant.
+- Keep responses under 200 words unless the user asks for detail.`;
+  }, [macros, measurements, oura, hue, sleep, coffeeOn]);
+
+  const send = useCallback(async (text) => {
+    const msg = text.trim();
+    if (!msg || loading) return;
+    setInput("");
+    const newMessages = [...messages, { role:"user", content:msg }];
+    setMessages(newMessages);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        body: JSON.stringify({
+          system: buildSystemPrompt(),
+          messages: newMessages.map(m => ({ role:m.role, content:m.content })),
+          apiKey,
+          model: "claude-sonnet-4-5",
+          maxTokens: 1000,
+        }),
+      });
+      const data = await res.json();
+      const reply = data.content?.[0]?.text
+        || data.error?.message
+        || "Something went wrong. Check your API key in Integrations.";
+      setMessages(prev => [...prev, { role:"assistant", content:reply }]);
+    } catch {
+      setMessages(prev => [...prev, { role:"assistant", content:"Network error — check your connection." }]);
+    }
+    setLoading(false);
+  }, [messages, loading, apiKey, buildSystemPrompt]);
+
+  const QUICK = [
+    "How am I doing today?",
+    "What should I eat?",
+    "Optimize my night",
+    "Training check",
+  ];
+
+  const Avatar = () => (
+    <div style={{
+      width:26, height:26, borderRadius:"50%", flexShrink:0, marginRight:8,
+      background:`linear-gradient(135deg, ${C.purple}, ${C.blue})`,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:10, fontFamily:"'Orbitron',monospace", fontWeight:700, color:"#fff",
+      boxShadow:`0 0 10px ${C.purple}55`,
+    }}>J</div>
+  );
+
+  return (
+    <>
+      <HUDCard title="JARVIS AI" accent={C.purple} glow>
+        {!apiKey && (
+          <div style={{ padding:"10px 14px", borderRadius:8, marginBottom:14,
+            background:"rgba(255,214,0,0.06)", border:`1px solid ${C.yellow}33`,
+            fontSize:12, color:C.yellow }}>
+            No API key set — add your Anthropic key in the Integrations tab to activate the AI brain.
+          </div>
+        )}
+
+        {/* Messages */}
+        <div style={{
+          height:420, overflowY:"auto", display:"flex", flexDirection:"column",
+          gap:10, marginBottom:14, paddingRight:4,
+          scrollbarWidth:"thin", scrollbarColor:`${C.dim} transparent`,
+        }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{ display:"flex", justifyContent: m.role==="user" ? "flex-end" : "flex-start", alignItems:"flex-start" }}>
+              {m.role === "assistant" && <Avatar />}
+              <div style={{
+                maxWidth:"78%", padding:"10px 14px", fontSize:13, lineHeight:1.65,
+                borderRadius: m.role==="user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px",
+                background: m.role==="user"
+                  ? `linear-gradient(135deg, rgba(0,200,255,0.12), rgba(0,112,224,0.1))`
+                  : "rgba(0,18,42,0.8)",
+                border:`1px solid ${m.role==="user" ? C.cyan+"44" : C.border}`,
+                color: m.role==="user" ? C.cyanBright : C.text,
+                whiteSpace:"pre-wrap", wordBreak:"break-word",
+              }}>{m.content}</div>
+            </div>
+          ))}
+
+          {loading && (
+            <div style={{ display:"flex", alignItems:"flex-start" }}>
+              <Avatar />
+              <div style={{
+                padding:"12px 16px", borderRadius:"4px 16px 16px 16px",
+                background:"rgba(0,18,42,0.8)", border:`1px solid ${C.border}`,
+                display:"flex", gap:5, alignItems:"center",
+              }}>
+                {[0,1,2].map(d => (
+                  <div key={d} style={{
+                    width:6, height:6, borderRadius:"50%", background:C.purple,
+                    animation:`jarvis-dot 1.2s ease-in-out ${d*0.18}s infinite`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        {/* Quick actions */}
+        <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+          {QUICK.map(q => (
+            <button key={q} onClick={() => send(q)} disabled={loading || !apiKey}
+              style={{
+                padding:"6px 12px", borderRadius:20, fontSize:11, fontWeight:600,
+                background:`${C.purple}10`, color: apiKey ? C.purple : C.dim,
+                border:`1px solid ${apiKey ? C.purple+"30" : C.dim+"20"}`,
+                cursor: loading || !apiKey ? "not-allowed" : "pointer",
+                opacity: loading || !apiKey ? 0.5 : 1,
+                letterSpacing:"0.04em", transition:"all 0.15s",
+              }}>{q}</button>
+          ))}
+        </div>
+
+        {/* Input row */}
+        <div style={{ display:"flex", gap:8, alignItems:"flex-end" }}>
+          <div style={{ flex:1 }}>
+            <HUDInput
+              placeholder={apiKey ? "Ask JARVIS anything…" : "Add API key in Integrations to chat"}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+              disabled={loading || !apiKey}
+              style={{ marginBottom:0 }}
+            />
+          </div>
+          <HUDBtn variant="primary" onClick={() => send(input)}
+            disabled={loading || !input.trim() || !apiKey}
+            style={{ flexShrink:0, marginBottom:0 }}>Send</HUDBtn>
+        </div>
+      </HUDCard>
+    </>
+  );
+}
+
 // ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
 function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
   const [time, setTime] = useState(timeStr());
@@ -2473,10 +2692,46 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
 }
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ jarvis, spotify, calendar, webhooks }) {
+function SettingsTab({ jarvis }) {
   return (
-    <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar}
-      crypto={{ enabled:false, setEnabled:()=>{}, prices:null }} webhooks={webhooks} />
+    <>
+      <HUDCard title="Claude AI Configuration" accent={C.purple}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          Your Anthropic API key powers both the AI chat tab and the voice assistant.
+          Stored locally and synced via Cloud Sync in Integrations.
+        </div>
+        <HUDInput label="Anthropic API Key" type="password" placeholder="sk-ant-..."
+          value={jarvis.apiKey} onChange={e => jarvis.setApiKey(e.target.value)} />
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:7, height:7, borderRadius:"50%",
+            background: jarvis.apiKey ? C.green : C.dim,
+            boxShadow: jarvis.apiKey ? `0 0 8px ${C.green}` : "none",
+          }} />
+          <span style={{ fontSize:11, color: jarvis.apiKey ? C.green : C.dim }}>
+            {jarvis.apiKey ? "API key set — AI chat and voice assistant active" : "No key — add one to enable AI features"}
+          </span>
+        </div>
+      </HUDCard>
+
+      <HUDCard title="About JARVIS">
+        <div style={{ fontSize:12, color:C.dim, lineHeight:1.9 }}>
+          {[
+            ["AI Chat model",    "claude-sonnet-4-5"],
+            ["Voice AI model",   "claude-haiku-4-5-20251001"],
+            ["Recipes",          `${RECIPES.length} KRANK recipes`],
+            ["Voice",            "ElevenLabs · Browser TTS fallback"],
+            ["Sync",             "GitHub Gist (Integrations tab)"],
+            ["Oura API",         "v2 — readiness, sleep, activity"],
+          ].map(([k, v]) => (
+            <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"2px 0",
+              borderBottom:`1px solid ${C.borderDim}` }}>
+              <span style={{ color:C.dimMid }}>{k}</span>
+              <span style={{ color:C.text, fontWeight:600 }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </HUDCard>
+    </>
   );
 }
 
@@ -2616,6 +2871,7 @@ export default function Jarvis() {
   speakRef.current = jarvis.speak; // keep ref fresh every render
 
   const TABS = [
+    ["ai",            "Jarvis AI"     ],
     ["briefing",      "Briefing"      ],
     ["macros",        "Macros"        ],
     ["environment",   "Home"          ],
@@ -2623,6 +2879,7 @@ export default function Jarvis() {
     ["body",          "Body"          ],
     ["sleep",         "Sleep"         ],
     ["integrations",  "Integrations"  ],
+    ["settings",      "Settings"      ],
   ];
 
   const training = isTrainingDay();
@@ -2737,6 +2994,7 @@ export default function Jarvis() {
 
       {/* Content */}
       <div style={{ padding:"24px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
+        {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
         {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
@@ -2744,10 +3002,11 @@ export default function Jarvis() {
         {tab==="body"          && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
         {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} oura={oura} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} cloudSync={cloudSync} />}
+        {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
       </div>
 
       {/* Floating orb */}
-      {tab !== "briefing" && <FloatingOrb jarvis={jarvis} />}
+      {tab !== "briefing" && tab !== "ai" && <FloatingOrb jarvis={jarvis} />}
     </div>
   );
 }

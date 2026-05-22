@@ -48,6 +48,11 @@ input[type=number] { -moz-appearance: textfield; }
 
 @keyframes progress-grow { from { width: 0; } }
 
+@keyframes jarvis-dot {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
+  40%            { transform: scale(1);   opacity: 1;   }
+}
+
 @keyframes ambient-pulse {
   0%, 100% { opacity: 0.5; }
   50%       { opacity: 1;   }

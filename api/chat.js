@@ -5,7 +5,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { system, messages, apiKey: clientKey } = req.body;
+  const { system, messages, apiKey: clientKey, model: clientModel, maxTokens: clientMaxTokens } = req.body;
   const apiKey = process.env.ANTHROPIC_API_KEY || clientKey;
 
   if (!apiKey) {
@@ -23,8 +23,8 @@ module.exports = async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
+        model: clientModel || 'claude-haiku-4-5-20251001',
+        max_tokens: clientMaxTokens || 600,
         system,
         messages,
       }),
