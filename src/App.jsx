@@ -461,7 +461,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
       });
       return r.json();
     };
@@ -1508,7 +1508,7 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
       <HUDCard>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
-            ["AI Model",    "Claude 3.5 Haiku"],
+            ["AI Model",    "Claude Haiku 4.5"],
             ["Voice STT",   "Web Speech API"],
             ["Voice TTS",   jarvis.elevenKey ? "ElevenLabs ●" : "Browser TTS ○"],
             ["Weather",     "Open-Meteo (free)"],
