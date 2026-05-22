@@ -410,7 +410,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-3-haiku-20240307", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
       });
       return r.json();
     };
