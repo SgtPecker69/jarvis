@@ -406,43 +406,33 @@ function useCalendar() {
     } catch {}
   };
 
-  const login = async () => {
+  // Implicit flow — token comes back in URL hash, no server-side exchange or client_secret needed.
+  // Google's "Web application" OAuth client type requires client_secret for code exchange, which
+  // we can't safely store client-side. Implicit flow is the correct approach for a pure JS app.
+  const login = () => {
     if (!clientId) return;
-    const v = genVerifier();
-    const c = await genChallenge(v);
-    localStorage.setItem("_gv",   v);
-    localStorage.setItem("_gcid", clientId);
     const p = new URLSearchParams({
-      client_id: clientId, redirect_uri: window.location.origin,
-      response_type: "code", scope: SCOPES,
-      code_challenge_method: "S256", code_challenge: c,
-      access_type: "online", state: "gcal"
+      client_id: clientId,
+      redirect_uri: window.location.origin,
+      response_type: "token",   // implicit — access_token returned in URL hash
+      scope: SCOPES,
+      include_granted_scopes: "true",
     });
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${p}`;
   };
 
-  const handleCallback = async (code) => {
-    const v   = localStorage.getItem("_gv");
-    const cid = localStorage.getItem("_gcid") || clientId;
-    const r = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: cid, code_verifier: v, code,
-        grant_type: "authorization_code", redirect_uri: window.location.origin
-      })
-    });
-    const d = await r.json();
-    if (d.access_token) {
-      setToken(d.access_token);
-      setExpiry(Date.now() + (d.expires_in || 3600) * 1000);
-      localStorage.removeItem("_gv");
-    }
+  // Called by the main component after it reads access_token from the URL hash
+  const handleImplicitToken = (accessToken, expiresIn) => {
+    setToken(accessToken);
+    setExpiry(Date.now() + (parseInt(expiresIn) || 3600) * 1000);
+    // Clean up any leftover PKCE state from old failed attempts
+    localStorage.removeItem("_gv");
+    localStorage.removeItem("_gcid");
   };
 
   const disconnect = () => { setToken(""); setExpiry(0); setEvents([]); };
 
-  return { clientId, setClientId, connected, expiry, login, handleCallback, disconnect, events, fetchEvents };
+  return { clientId, setClientId, connected, expiry, login, handleImplicitToken, disconnect, events, fetchEvents };
 }
 
 // ─── WEATHER HOOK ──────────────────────────────────────────────────────────────
@@ -2067,8 +2057,9 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
         statusOk={calendar.connected}>
         <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
           1. <span style={{ color:C.cyan }}>console.cloud.google.com</span> → Enable Calendar API<br/>
-          2. Credentials → OAuth 2.0 Web app → Redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
-          3. Copy Client ID below
+          2. Credentials → OAuth 2.0 → Web application → Authorised JavaScript origins: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          3. Same credential → Authorised redirect URIs: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          4. Copy Client ID below
         </div>
         <HUDInput label="Google OAuth Client ID" placeholder="your-id.apps.googleusercontent.com"
           value={calendar.clientId} onChange={e => calendar.setClientId(e.target.value)} />
@@ -2354,13 +2345,24 @@ export default function Jarvis() {
 
   // Handle OAuth callbacks on mount
   useEffect(() => {
+    // ── Google Calendar: implicit flow — token in URL hash (#access_token=...) ──
+    if (window.location.hash) {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessToken = hash.get("access_token");
+      if (accessToken) {
+        window.history.replaceState({}, "", window.location.pathname);
+        calendar.handleImplicitToken(accessToken, hash.get("expires_in"));
+        return;
+      }
+    }
+
+    // ── Spotify: PKCE code flow — code in URL query string (?code=...&state=spotify) ──
     const p = new URLSearchParams(window.location.search);
     const code  = p.get("code");
     const state = p.get("state");
-    if (code && state) {
+    if (code && state === "spotify") {
       window.history.replaceState({}, "", window.location.pathname);
-      if (state === "spotify") spotify.handleCallback(code).catch(()=>{});
-      if (state === "gcal")    calendar.handleCallback(code).catch(()=>{});
+      spotify.handleCallback(code).catch(() => {});
     }
   }, []);
 
