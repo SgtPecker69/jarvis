@@ -415,18 +415,32 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
       return r.json();
     };
 
-    let data;
-    try {
+    const callProxy = async () => {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiKey: apiKey || undefined, system, messages: [{ role:"user", content:text }] })
       });
-      if (r.status === 404) data = await tryDirect();
-      else data = await r.json();
-    } catch {
-      try { data = await tryDirect(); }
-      catch { speak("I can't reach my processing core. Please add your Anthropic API key in Settings."); setThinking(false); return; }
+      if (r.status === 404) return tryDirect();
+      return r.json();
+    };
+
+    const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+    let data;
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        data = await callProxy();
+      } catch {
+        try { data = await tryDirect(); }
+        catch { speak("I can't reach my processing core. Please add your Anthropic API key in Settings."); setThinking(false); return; }
+      }
+      if (data?.error?.type === "overloaded_error" || data?.error?.message?.includes("overloaded")) {
+        if (attempt < maxAttempts - 1) { await sleep(1000 * Math.pow(2, attempt)); continue; }
+        speak("My processing core is under heavy load. Try again in a moment."); setThinking(false); return;
+      }
+      break;
     }
 
     if (data?.error) { speak("I encountered an issue: " + (data.error.message || "unknown error.")); setThinking(false); return; }
