@@ -286,6 +286,52 @@ function useWeather() {
   return { data, city };
 }
 
+// ─── WEBHOOKS HOOK ────────────────────────────────────────────────────────────
+function useWebhooks() {
+  const [webhooks, setWebhooks] = useLocalStorage("jarvis_webhooks", []);
+
+  const add = (wh) => setWebhooks(prev => [...prev, { ...wh, id: Date.now().toString(), enabled: true }]);
+  const update = (id, changes) => setWebhooks(prev => prev.map(w => w.id === id ? { ...w, ...changes } : w));
+  const remove = (id) => setWebhooks(prev => prev.filter(w => w.id !== id));
+
+  const trigger = async (id, payload) => {
+    const wh = webhooks.find(w => w.id === id);
+    if (!wh || !wh.enabled) return null;
+    try {
+      const res = await fetch(wh.url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, _jarvis: true }),
+      });
+      if (!res.ok) return null;
+      try { return await res.json(); } catch { return null; }
+    } catch { return null; }
+  };
+
+  return { webhooks, add, update, remove, trigger };
+}
+
+// ─── CRYPTO HOOK ──────────────────────────────────────────────────────────────
+function useCrypto() {
+  const [prices, setPrices] = useState(null);
+  const [enabled, setEnabled] = useLocalStorage("jarvis_crypto_enabled", false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const load = async () => {
+      try {
+        const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true");
+        setPrices(await res.json());
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [enabled]);
+
+  return { prices, enabled, setEnabled };
+}
+
 // ─── JARVIS AI HOOK ────────────────────────────────────────────────────────────
 // ElevenLabs voice IDs — curated natural female voices
 const ELEVEN_VOICES = [
@@ -298,7 +344,7 @@ const ELEVEN_VOICES = [
 ];
 const DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // Jessica — Australian female
 
-function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, onAction }) {
+function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction }) {
   const [listening,  setListening]  = useState(false);
   const [thinking,   setThinking]   = useState(false);
   const [speaking,   setSpeaking]   = useState(false);
@@ -381,7 +427,8 @@ Carbs: ${Math.round(macros.carbs)}g | Fat: ${Math.round(macros.fat)}g
 
 BODY: Weight: ${lw ? lw + " lbs" : "not logged"} | Waist: ${lwa ? lwa + " cm (target 81-84cm)" : "not logged"} | Avg sleep (7d): ${avgS ? avgS + " hrs" : "no data"}
 
-ENVIRONMENT: Hue ${hue.connected ? "connected (" + hue.lights.length + " lights)" : "disconnected"} | Coffee: ${coffeeOn ? "on" : "off"} | Weather: ${weather.data ? Math.round(weather.data.temperature_2m) + "°F " + wxDesc(weather.data.weather_code) + (weather.city ? " in " + weather.city : "") : "unavailable"}
+ENVIRONMENT: Hue ${hue.connected ? "connected (" + hue.lights.length + " lights)" : "disconnected"} | Coffee: ${coffeeOn ? "on" : "off"} | Weather: ${weather.data ? Math.round(weather.data.temperature_2m) + "°F " + wxDesc(weather.data.weather_code) + (weather.city ? " in " + weather.city : "") : "unavailable"}${crypto?.prices ? `
+CRYPTO: BTC $${crypto.prices.bitcoin?.usd?.toLocaleString()} (${crypto.prices.bitcoin?.usd_24h_change?.toFixed(1)}% 24h) | ETH $${crypto.prices.ethereum?.usd?.toLocaleString()} | SOL $${crypto.prices.solana?.usd?.toFixed(2)}` : ""}
 
 SPOTIFY: ${np?.is_playing ? `Playing "${np.item?.name}" by ${np.item?.artists?.[0]?.name}` : spotify.connected ? "Connected, nothing playing" : "Not connected"}
 
@@ -392,8 +439,12 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
 <action>{"type":"spotify","cmd":"play|pause|next|prev|play:search query"}</action>
 <action>{"type":"log_macros","cal":0,"protein":0,"carbs":0,"fat":0}</action>
 <action>{"type":"reset_macros"}</action>
-<action>{"type":"coffee","on":true}</action>`;
-  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn]);
+<action>{"type":"coffee","on":true}</action>${webhooks?.webhooks?.filter(w=>w.enabled).length ? `
+<action>{"type":"webhook","id":"WEBHOOK_ID"}</action>
+
+CUSTOM WEBHOOKS (use webhook action with the exact id when triggered):
+${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}" triggers on: ${w.triggers} — ${w.description}`).join('\n')}` : ''}`;
+  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto]);
 
   const processCommand = useCallback(async (text) => {
     setThinking(true);
@@ -1216,123 +1267,256 @@ function SleepTab({ sleep, setSleep, notify }) {
   );
 }
 
-// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
-function SettingsTab({ jarvis, spotify, calendar }) {
-  const [show, setShow] = useState({ claude:false, eleven:false, spotify:false, gcal:false });
-  const toggle = k => setShow(s => ({ ...s, [k]:!s[k] }));
+// ─── INTEGRATIONS TAB ─────────────────────────────────────────────────────────
+function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
+  const [open,    setOpen]    = useState({});
+  const [newWH,   setNewWH]   = useState({ name:"", url:"", triggers:"", description:"" });
+  const [adding,  setAdding]  = useState(false);
+  const [testing, setTesting] = useState(null);
 
-  const Section = ({ id, title, status, children }) => (
-    <HUDCard style={{ marginBottom:10 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}
-        onClick={()=>toggle(id)}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{title}</div>
-          <div style={{ fontSize:11, color:status.ok?C.green:C.dim, marginTop:2 }}>{status.label}</div>
+  const toggle = id => setOpen(s => ({ ...s, [id]: !s[id] }));
+
+  const IntCard = ({ id, icon, title, status, statusOk, children }) => (
+    <div style={{ background:"rgba(0,18,42,0.7)", border:`1px solid ${statusOk ? C.cyan+"33" : C.border}`,
+      borderRadius:10, marginBottom:10, overflow:"hidden", transition:"border-color 0.3s" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"14px 16px", cursor:"pointer" }} onClick={() => toggle(id)}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <span style={{ fontSize:20 }}>{icon}</span>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{title}</div>
+            <div style={{ fontSize:11, color:statusOk ? C.green : C.dim, marginTop:2 }}>{status}</div>
+          </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <StatusDot on={status.ok} label="" />
-          <span style={{ color:C.dim, fontSize:16 }}>{show[id]?"▲":"▼"}</span>
+          <div style={{ width:8, height:8, borderRadius:"50%", background:statusOk ? C.green : C.dim,
+            boxShadow:statusOk ? `0 0 6px ${C.green}` : "none" }} />
+          <span style={{ color:C.dim, fontSize:13 }}>{open[id] ? "▲" : "▼"}</span>
         </div>
       </div>
-      {show[id] && <div style={{ marginTop:16, borderTop:`1px solid ${C.borderDim}`, paddingTop:16 }}>{children}</div>}
-    </HUDCard>
+      {open[id] && (
+        <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${C.borderDim}` }}>
+          <div style={{ height:14 }} />
+          {children}
+        </div>
+      )}
+    </div>
   );
+
+  const testWebhook = async (wh) => {
+    setTesting(wh.id);
+    try {
+      await fetch(wh.url, {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ _jarvis:true, test:true, name:wh.name, timestamp:new Date().toISOString() }),
+      });
+    } catch {}
+    setTesting(null);
+  };
+
+  const saveWebhook = () => {
+    if (!newWH.name || !newWH.url) return;
+    webhooks.add(newWH);
+    setNewWH({ name:"", url:"", triggers:"", description:"" });
+    setAdding(false);
+  };
 
   return (
     <>
-      <div style={{ fontSize:10, letterSpacing:"0.15em", color:C.dim, marginBottom:16 }}>◆ SYSTEM CONFIGURATION</div>
+      <div style={{ fontSize:10, letterSpacing:"0.15em", color:C.dim, marginBottom:16 }}>◆ INTEGRATIONS HUB</div>
 
-      {/* Claude / AI */}
-      <Section id="claude" title="Claude AI Brain"
-        status={{ ok:!!jarvis.apiKey, label:jarvis.apiKey?"API key configured":"API key required for voice commands" }}>
-        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
-          Get your API key at <span style={{ color:C.cyan }}>console.anthropic.com</span> → API Keys.<br/>
-          For Vercel production, set <span style={{ color:C.cyan }}>ANTHROPIC_API_KEY</span> as an environment variable in your Vercel project settings.<br/>
-          For local dev, enter your key below — it's sent directly to Anthropic's API.
+      {/* ── AI CORE ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, fontWeight:600 }}>AI CORE</div>
+
+      <IntCard id="claude" icon="🧠" title="Claude AI Brain"
+        status={jarvis.apiKey ? "API key configured" : "API key required"}
+        statusOk={!!jarvis.apiKey}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+          Get your key at <span style={{ color:C.cyan }}>console.anthropic.com</span> → API Keys.
+          For Vercel, set <span style={{ color:C.cyan }}>ANTHROPIC_API_KEY</span> in project environment vars instead.
         </div>
         <HUDInput label="Anthropic API Key" type="password" placeholder="sk-ant-..."
-          value={jarvis.apiKey} onChange={e=>jarvis.setApiKey(e.target.value)} />
-        <div style={{ fontSize:11, color:C.dim, marginTop:-6 }}>Stored in localStorage. Never logged or sent anywhere except Anthropic.</div>
-      </Section>
+          value={jarvis.apiKey} onChange={e => jarvis.setApiKey(e.target.value)} />
+        <div style={{ fontSize:11, color:C.dim, marginTop:-4 }}>Stored in localStorage only.</div>
+      </IntCard>
 
-      {/* ElevenLabs Voice */}
-      <Section id="eleven" title="ElevenLabs Voice (Premium TTS)"
-        status={{ ok:!!jarvis.elevenKey, label:jarvis.elevenKey?"Human-quality voice active":"Using browser TTS (robotic) — add key for real voice" }}>
-        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
-          Get a free API key at <span style={{ color:C.cyan }}>elevenlabs.io</span> → Profile → API Key.<br/>
-          Free tier gives 10,000 characters/month — plenty for daily use.<br/>
-          Jessica is the default: Australian female, calm and natural.
+      <IntCard id="eleven" icon="🎙️" title="ElevenLabs Voice"
+        status={jarvis.elevenKey ? "Human-quality voice active" : "Using browser TTS — add key for real voice"}
+        statusOk={!!jarvis.elevenKey}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+          Free tier at <span style={{ color:C.cyan }}>elevenlabs.io</span> → Profile → API Key. 10k chars/month free.
         </div>
         <HUDInput label="ElevenLabs API Key" type="password" placeholder="your-elevenlabs-api-key"
-          value={jarvis.elevenKey} onChange={e=>jarvis.setElevenKey(e.target.value)} />
-        <div style={{ fontSize:12, color:C.dim, marginBottom:8, marginTop:4 }}>Voice Selection</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+          value={jarvis.elevenKey} onChange={e => jarvis.setElevenKey(e.target.value)} />
+        <div style={{ fontSize:12, color:C.dim, marginBottom:8 }}>Voice</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:4 }}>
           {ELEVEN_VOICES.map(v => (
-            <button key={v.id} onClick={()=>jarvis.setVoiceId(v.id)}
-              style={{
-                padding:"10px 12px", border:`1px solid ${jarvis.voiceId===v.id?C.cyan:C.border}`,
-                background: jarvis.voiceId===v.id ? "rgba(0,212,255,0.12)" : "rgba(0,18,42,0.6)",
-                color: jarvis.voiceId===v.id ? C.cyan : C.text,
-                borderRadius:6, cursor:"pointer", textAlign:"left", fontSize:12,
-                transition:"all 0.2s",
-              }}>
-              {jarvis.voiceId===v.id && <span style={{ marginRight:6 }}>●</span>}
-              {v.name}
+            <button key={v.id} onClick={() => jarvis.setVoiceId(v.id)} style={{
+              padding:"9px 12px", border:`1px solid ${jarvis.voiceId===v.id ? C.cyan : C.border}`,
+              background: jarvis.voiceId===v.id ? "rgba(0,212,255,0.12)" : "transparent",
+              color: jarvis.voiceId===v.id ? C.cyan : C.text,
+              borderRadius:6, cursor:"pointer", textAlign:"left", fontSize:12, transition:"all 0.2s",
+            }}>
+              {jarvis.voiceId===v.id ? "● " : ""}{v.name}
             </button>
           ))}
         </div>
-        <div style={{ fontSize:11, color:C.dim }}>API key stored in localStorage only. Falls back to browser TTS if key is missing or request fails.</div>
-      </Section>
+      </IntCard>
 
-      {/* Spotify */}
-      <Section id="spotify" title="Spotify"
-        status={{ ok:spotify.connected, label:spotify.connected?"Connected":"Not connected" }}>
-        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
-          1. Go to <span style={{ color:C.cyan }}>developer.spotify.com/dashboard</span><br/>
-          2. Create an app → Settings → Add redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
-          3. Copy the Client ID and paste below
+      {/* ── CONNECTED SERVICES ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:18, fontWeight:600 }}>CONNECTED SERVICES</div>
+
+      <IntCard id="spotify" icon="🎵" title="Spotify"
+        status={spotify.connected ? "Connected" : "Not connected"}
+        statusOk={spotify.connected}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+          1. <span style={{ color:C.cyan }}>developer.spotify.com/dashboard</span> → Create app<br/>
+          2. Settings → Redirect URIs → Add: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          3. Copy Client ID below
         </div>
-        <HUDInput label="Spotify Client ID" placeholder="your-spotify-client-id"
-          value={spotify.clientId} onChange={e=>spotify.setClientId(e.target.value)} />
+        <HUDInput label="Spotify Client ID" placeholder="your-client-id"
+          value={spotify.clientId} onChange={e => spotify.setClientId(e.target.value)} />
         {spotify.connected
-          ? <div style={{ display:"flex", gap:8 }}>
-              <HUDBtn variant="danger" onClick={spotify.disconnect}>Disconnect Spotify</HUDBtn>
-            </div>
-          : <HUDBtn variant="primary" onClick={spotify.login} disabled={!spotify.clientId}>Connect Spotify</HUDBtn>
-        }
-      </Section>
+          ? <HUDBtn variant="danger" onClick={spotify.disconnect}>Disconnect</HUDBtn>
+          : <HUDBtn variant="primary" onClick={spotify.login} disabled={!spotify.clientId}>Connect Spotify</HUDBtn>}
+      </IntCard>
 
-      {/* Google Calendar */}
-      <Section id="gcal" title="Google Calendar"
-        status={{ ok:calendar.connected, label:calendar.connected?"Connected":"Not connected" }}>
-        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
-          1. Go to <span style={{ color:C.cyan }}>console.cloud.google.com</span> → Create project<br/>
-          2. Enable <strong style={{ color:C.text }}>Google Calendar API</strong><br/>
-          3. OAuth consent screen → External → Add your email as test user<br/>
-          4. Credentials → Create → Web application<br/>
-          5. Add redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
-          6. Copy Client ID below — no secret needed
+      <IntCard id="gcal" icon="📅" title="Google Calendar"
+        status={calendar.connected ? "Connected" : "Not connected"}
+        statusOk={calendar.connected}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+          1. <span style={{ color:C.cyan }}>console.cloud.google.com</span> → Enable Calendar API<br/>
+          2. Credentials → OAuth 2.0 Web app → Redirect URI: <span style={{ color:C.cyan }}>{window.location.origin}</span><br/>
+          3. Copy Client ID below
         </div>
-        <HUDInput label="Google OAuth Client ID" placeholder="your-client-id.apps.googleusercontent.com"
-          value={calendar.clientId} onChange={e=>calendar.setClientId(e.target.value)} />
+        <HUDInput label="Google OAuth Client ID" placeholder="your-id.apps.googleusercontent.com"
+          value={calendar.clientId} onChange={e => calendar.setClientId(e.target.value)} />
         {calendar.connected
-          ? <HUDBtn variant="danger" onClick={calendar.disconnect}>Disconnect Calendar</HUDBtn>
-          : <HUDBtn variant="primary" onClick={calendar.login} disabled={!calendar.clientId}>Connect Google Calendar</HUDBtn>
-        }
-        <div style={{ fontSize:11, color:C.dim, marginTop:10 }}>Token expires in 1 hour — reconnect as needed.</div>
-      </Section>
+          ? <HUDBtn variant="danger" onClick={calendar.disconnect}>Disconnect</HUDBtn>
+          : <HUDBtn variant="primary" onClick={calendar.login} disabled={!calendar.clientId}>Connect Calendar</HUDBtn>}
+        <div style={{ fontSize:11, color:C.dim, marginTop:8 }}>Token expires in 1hr — reconnect as needed.</div>
+      </IntCard>
 
-      {/* About */}
-      <HUDCard title="System Info">
+      <IntCard id="hue" icon="💡" title="Philips Hue"
+        status="Configure in Home tab"
+        statusOk={false}>
+        <div style={{ fontSize:12, color:C.dim, lineHeight:1.6 }}>
+          Hue Bridge setup is in the <span style={{ color:C.cyan }}>Home</span> tab → scroll to Bridge Setup.
+          Control lights by voice: <em>"Set lights to focus"</em>, <em>"Wind down mode"</em>, etc.
+        </div>
+      </IntCard>
+
+      {/* ── DATA FEEDS ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:18, fontWeight:600 }}>DATA FEEDS</div>
+
+      <IntCard id="weather" icon="🌤️" title="Weather" status="Always on — Open-Meteo (free)" statusOk={true}>
+        <div style={{ fontSize:12, color:C.dim, lineHeight:1.6 }}>
+          Uses your browser's geolocation + Open-Meteo free API. No key needed. Allow location access when prompted.
+        </div>
+      </IntCard>
+
+      <IntCard id="crypto" icon="₿" title="Crypto Prices (CoinGecko)"
+        status={crypto.enabled ? "Live — BTC / ETH / SOL" : "Disabled"}
+        statusOk={crypto.enabled}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          Free CoinGecko API — no key required. Updates every 60 seconds when enabled.
+          Ask Jarvis: <em>"What's Bitcoin at?"</em>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <button onClick={() => crypto.setEnabled(!crypto.enabled)} style={{
+            padding:"8px 20px", borderRadius:6, fontSize:12, fontWeight:600, cursor:"pointer",
+            background: crypto.enabled ? "rgba(255,34,85,0.15)" : "rgba(0,212,255,0.12)",
+            border: `1px solid ${crypto.enabled ? C.red+"55" : C.cyan+"55"}`,
+            color: crypto.enabled ? C.red : C.cyan,
+          }}>
+            {crypto.enabled ? "Disable" : "Enable"}
+          </button>
+          {crypto.prices && (
+            <div style={{ display:"flex", gap:12, fontSize:12 }}>
+              {crypto.prices.bitcoin && <span style={{ color:C.orange }}>BTC ${crypto.prices.bitcoin.usd?.toLocaleString()}</span>}
+              {crypto.prices.ethereum && <span style={{ color:C.purple }}>ETH ${crypto.prices.ethereum.usd?.toLocaleString()}</span>}
+              {crypto.prices.solana && <span style={{ color:C.green }}>SOL ${crypto.prices.solana.usd?.toFixed(2)}</span>}
+            </div>
+          )}
+        </div>
+      </IntCard>
+
+      {/* ── CUSTOM WEBHOOKS ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:18, fontWeight:600 }}>CUSTOM WEBHOOKS</div>
+      <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+        Connect anything via webhook. Build a scenario in <span style={{ color:C.cyan }}>make.com</span> or <span style={{ color:C.cyan }}>zapier.com</span> (both free), copy the webhook URL, and Jarvis will call it by voice.
+      </div>
+
+      {webhooks.webhooks.map(wh => (
+        <div key={wh.id} style={{ background:"rgba(0,18,42,0.6)", border:`1px solid ${wh.enabled ? C.cyan+"33" : C.border}`,
+          borderRadius:10, padding:"14px 16px", marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:wh.description?6:0 }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{wh.name}</div>
+              {wh.description && <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{wh.description}</div>}
+              {wh.triggers && <div style={{ fontSize:11, color:C.blue, marginTop:4 }}>Triggers: <em>"{wh.triggers}"</em></div>}
+            </div>
+            <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0, marginLeft:12 }}>
+              <button onClick={() => testWebhook(wh)} disabled={testing===wh.id} style={{
+                padding:"5px 10px", fontSize:11, borderRadius:5, cursor:"pointer",
+                background:"rgba(0,212,255,0.08)", border:`1px solid ${C.cyan}44`, color:C.cyan,
+              }}>{testing===wh.id ? "…" : "Test"}</button>
+              <button onClick={() => webhooks.update(wh.id, { enabled:!wh.enabled })} style={{
+                padding:"5px 10px", fontSize:11, borderRadius:5, cursor:"pointer",
+                background: wh.enabled ? "rgba(0,255,153,0.08)" : "rgba(61,98,117,0.2)",
+                border:`1px solid ${wh.enabled ? C.green+"44" : C.dim+"44"}`,
+                color: wh.enabled ? C.green : C.dim,
+              }}>{wh.enabled ? "On" : "Off"}</button>
+              <button onClick={() => webhooks.remove(wh.id)} style={{
+                padding:"5px 10px", fontSize:11, borderRadius:5, cursor:"pointer",
+                background:"rgba(255,34,85,0.08)", border:`1px solid ${C.red}44`, color:C.red,
+              }}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {adding ? (
+        <div style={{ background:"rgba(0,18,42,0.8)", border:`1px solid ${C.cyan}44`, borderRadius:10, padding:16, marginBottom:10 }}>
+          <div style={{ fontSize:12, fontWeight:600, color:C.cyan, marginBottom:14, letterSpacing:"0.08em" }}>NEW WEBHOOK</div>
+          <HUDInput label="Name" placeholder="e.g. Order Supplements"
+            value={newWH.name} onChange={e => setNewWH({...newWH, name:e.target.value})} />
+          <HUDInput label="Webhook URL" placeholder="https://hook.make.com/..."
+            value={newWH.url} onChange={e => setNewWH({...newWH, url:e.target.value})} />
+          <HUDInput label="Trigger phrases (what you say to Jarvis)"
+            placeholder="e.g. order supplements, buy protein"
+            value={newWH.triggers} onChange={e => setNewWH({...newWH, triggers:e.target.value})} />
+          <HUDInput label="Description (what this does)"
+            placeholder="e.g. Places a repeat order for my supplement stack"
+            value={newWH.description} onChange={e => setNewWH({...newWH, description:e.target.value})} />
+          <div style={{ display:"flex", gap:8 }}>
+            <HUDBtn variant="primary" onClick={saveWebhook} disabled={!newWH.name || !newWH.url}>Save Webhook</HUDBtn>
+            <HUDBtn onClick={() => { setAdding(false); setNewWH({ name:"", url:"", triggers:"", description:"" }); }}>Cancel</HUDBtn>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={{
+          width:"100%", padding:"13px", borderRadius:10, fontSize:13, fontWeight:600,
+          background:"rgba(0,212,255,0.05)", border:`1px dashed ${C.cyan}44`,
+          color:C.cyan, cursor:"pointer", letterSpacing:"0.06em", transition:"all 0.2s",
+        }}>+ ADD WEBHOOK</button>
+      )}
+
+      {/* ── SYSTEM INFO ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:24, fontWeight:600 }}>SYSTEM</div>
+      <HUDCard>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
-            ["AI Model",      "Claude Haiku"],
-            ["Voice STT",     "Web Speech API"],
-            ["Voice TTS",     jarvis.elevenKey?"ElevenLabs ●":"Browser TTS ○"],
-            ["Weather",       "Open-Meteo"],
-            ["Music",         spotify.connected?"Spotify ●":"Spotify ○"],
-            ["Calendar",      calendar.connected?"Google ●":"Google ○"],
-          ].map(([k,v]) => (
+            ["AI Model",    "Claude 3.5 Haiku"],
+            ["Voice STT",   "Web Speech API"],
+            ["Voice TTS",   jarvis.elevenKey ? "ElevenLabs ●" : "Browser TTS ○"],
+            ["Weather",     "Open-Meteo (free)"],
+            ["Music",       spotify.connected ? "Spotify ●" : "Spotify ○"],
+            ["Calendar",    calendar.connected ? "Google ●" : "Google ○"],
+            ["Crypto",      crypto.enabled ? "CoinGecko ●" : "Disabled ○"],
+            ["Webhooks",    `${webhooks.webhooks.filter(w=>w.enabled).length} active`],
+          ].map(([k, v]) => (
             <div key={k} style={{ padding:"8px 0", borderBottom:`1px solid ${C.borderDim}` }}>
               <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", textTransform:"uppercase" }}>{k}</div>
               <div style={{ fontSize:13, color:C.text, marginTop:2 }}>{v}</div>
@@ -1341,6 +1525,14 @@ function SettingsTab({ jarvis, spotify, calendar }) {
         </div>
       </HUDCard>
     </>
+  );
+}
+
+// ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
+function SettingsTab({ jarvis, spotify, calendar, webhooks }) {
+  return (
+    <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar}
+      crypto={{ enabled:false, setEnabled:()=>{}, prices:null }} webhooks={webhooks} />
   );
 }
 
@@ -1372,6 +1564,8 @@ export default function Jarvis() {
   const spotify  = useSpotify();
   const calendar = useCalendar();
   const weather  = useWeather();
+  const webhooks = useWebhooks();
+  const crypto   = useCrypto();
 
   const notify = useCallback((msg, type = "success") => {
     setNotification({ msg, type });
@@ -1438,19 +1632,28 @@ export default function Jarvis() {
         setCoffeeOn(action.on);
         notify(action.on ? "☕ Coffee maker on" : "Coffee maker off", "success");
         break;
+      case "webhook": {
+        const result = await webhooks.trigger(action.id, {
+          timestamp: new Date().toISOString(),
+          context: { macros, coffeeOn },
+        });
+        if (result?.message) jarvis?.speak(result.message);
+        else notify("Webhook triggered", "success");
+        break;
+      }
     }
-  }, [applyScene, spotify, setMacros, setCoffeeOn]);
+  }, [applyScene, spotify, setMacros, setCoffeeOn, webhooks, macros, coffeeOn]);
 
-  const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, onAction:handleAction });
+  const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction:handleAction });
 
   const TABS = [
-    ["briefing",    "Briefing"  ],
-    ["macros",      "Macros"    ],
-    ["environment", "Home"      ],
-    ["recipes",     "Recipes"   ],
-    ["body",        "Body"      ],
-    ["sleep",       "Sleep"     ],
-    ["settings",    "Settings"  ],
+    ["briefing",      "Briefing"      ],
+    ["macros",        "Macros"        ],
+    ["environment",   "Home"          ],
+    ["recipes",       "Recipes"       ],
+    ["body",          "Body"          ],
+    ["sleep",         "Sleep"         ],
+    ["integrations",  "Integrations"  ],
   ];
 
   const training = isTrainingDay();
@@ -1542,8 +1745,8 @@ export default function Jarvis() {
         {tab==="environment" && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
         {tab==="recipes"     && <RecipesTab />}
         {tab==="body"        && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
-        {tab==="sleep"       && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
-        {tab==="settings"    && <SettingsTab jarvis={jarvis} spotify={spotify} calendar={calendar} />}
+        {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
+        {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
       </div>
 
       {/* Floating orb (non-briefing tabs) */}
