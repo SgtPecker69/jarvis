@@ -350,11 +350,18 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
   const [speaking,   setSpeaking]   = useState(false);
   const [transcript, setTranscript] = useState("");
   const [response,   setResponse]   = useState("");
-  const [apiKey,     setApiKey]     = useLocalStorage("jarvis_api_key", "");
-  const [elevenKey,  setElevenKey]  = useLocalStorage("jarvis_eleven_key", "");
-  const [voiceId,    setVoiceId]    = useLocalStorage("jarvis_voice_id", DEFAULT_VOICE_ID);
+  const [apiKey,      setApiKey]     = useLocalStorage("jarvis_api_key", "");
+  const [groqKey,     setGroqKey]    = useLocalStorage("jarvis_groq_key", "");
+  const [elevenKey,   setElevenKey]  = useLocalStorage("jarvis_eleven_key", "");
+  const [voiceId,     setVoiceId]    = useLocalStorage("jarvis_voice_id", DEFAULT_VOICE_ID);
+  const [chatHistory, setChatHistory]= useLocalStorage("jarvis_chat_history", []);
+  const [memories,    setMemories]   = useLocalStorage("jarvis_memories", []);
   const recogRef  = useRef(null);
   const audioRef  = useRef(null);
+
+  const clearHistory  = useCallback(() => setChatHistory([]), []);
+  const clearMemories = useCallback(() => setMemories([]), []);
+  const deleteMemory  = useCallback((id) => setMemories(m => m.filter(x => x.id !== id)), []);
 
   const speak = useCallback(async (text) => {
     // Stop any current playback
@@ -434,6 +441,11 @@ SPOTIFY: ${np?.is_playing ? `Playing "${np.item?.name}" by ${np.item?.artists?.[
 
 CALENDAR: ${calendar.events?.length ? calendar.events.map(e => e.summary + (e.start?.dateTime ? " at " + new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "")).join("; ") : "No events today"}
 
+LONG-TERM MEMORY (facts you've learned about Mark — always factor these in):
+${memories.length ? memories.map(m => `- ${m.fact}`).join('\n') : "No memories stored yet."}
+
+When Mark tells you something worth remembering (a preference, goal, fact about himself, or anything he explicitly asks you to remember), append: <remember>one-sentence fact</remember>
+
 AVAILABLE ACTIONS (append to end of response, only when taking an action):
 <action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
 <action>{"type":"spotify","cmd":"play|pause|next|prev|play:search query"}</action>
@@ -444,7 +456,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
 
 CUSTOM WEBHOOKS (use webhook action with the exact id when triggered):
 ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}" triggers on: ${w.triggers} — ${w.description}`).join('\n')}` : ''}`;
-  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto]);
+  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, memories]);
 
   const processCommand = useCallback(async (text) => {
     setThinking(true);
@@ -461,36 +473,60 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [...recentHistory, { role:"user", content:text }] })
       });
       return r.json();
+    };
+
+    const tryGroq = async () => {
+      if (!groqKey) throw new Error("no groq key");
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama3-8b-8192",
+          max_tokens: 400,
+          messages: [{ role: "system", content: system }, ...recentHistory, { role: "user", content: text }]
+        })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error?.message || "Groq error");
+      return { content: [{ text: d.choices?.[0]?.message?.content || "" }] };
     };
 
     const callProxy = async () => {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKey || undefined, system, messages: [{ role:"user", content:text }] })
+        body: JSON.stringify({ apiKey: apiKey || undefined, system, messages: [...recentHistory, { role:"user", content:text }] })
       });
       if (r.status === 404) return tryDirect();
       return r.json();
     };
 
-    const sleep = ms => new Promise(res => setTimeout(res, ms));
+    // Last 20 messages (10 exchanges) for context window
+    const recentHistory = chatHistory.slice(-20);
+
+    const sleepMs = ms => new Promise(res => setTimeout(res, ms));
 
     let data;
-    const maxAttempts = 5;
+    const maxAttempts = 3;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         data = await callProxy();
       } catch {
         try { data = await tryDirect(); }
-        catch { speak("I can't reach my processing core. Please add your Anthropic API key in Settings."); setThinking(false); return; }
+        catch {
+          if (groqKey) { try { data = await tryGroq(); break; } catch {} }
+          speak("I can't reach my processing core. Add your API key in Integrations."); setThinking(false); return;
+        }
       }
       const isOverloaded = data?.error?.type === "overloaded_error" || data?.error?.message?.toLowerCase().includes("overloaded");
       if (isOverloaded) {
-        if (attempt < maxAttempts - 1) { await sleep(Math.min(1000 * Math.pow(2, attempt), 8000)); continue; }
-        speak("Still overloaded after several retries. Give it a few seconds and try again."); setThinking(false); return;
+        // Instant fallback to Groq if available
+        if (groqKey) { try { data = await tryGroq(); break; } catch {} }
+        if (attempt < maxAttempts - 1) { await sleepMs(1000 * (attempt + 1)); continue; }
+        speak("Systems are overloaded. Add a Groq key in Integrations for instant fallback."); setThinking(false); return;
       }
       break;
     }
@@ -498,14 +534,36 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
     if (data?.error) { speak("I encountered an issue: " + (data.error.message || "unknown error.")); setThinking(false); return; }
 
     let txt = data?.content?.[0]?.text || "";
-    const match = txt.match(/<action>([\s\S]*?)<\/action>/);
-    if (match) {
-      try { onAction(JSON.parse(match[1].trim())); } catch {}
-      txt = txt.replace(/<action>[\s\S]*?<\/action>/, "").trim();
+
+    // Parse action tags
+    const actionMatch = txt.match(/<action>([\s\S]*?)<\/action>/);
+    if (actionMatch) {
+      try { onAction(JSON.parse(actionMatch[1].trim())); } catch {}
+      txt = txt.replace(/<action>[\s\S]*?<\/action>/g, "").trim();
     }
+
+    // Parse remember tags — store as long-term memories
+    const rememberMatches = [...txt.matchAll(/<remember>([\s\S]*?)<\/remember>/g)];
+    if (rememberMatches.length) {
+      const newMems = rememberMatches.map(m => ({
+        id: Date.now().toString() + Math.random().toString(36).slice(2),
+        fact: m[1].trim(),
+        timestamp: new Date().toISOString(),
+      }));
+      setMemories(prev => [...prev, ...newMems].slice(-100));
+      txt = txt.replace(/<remember>[\s\S]*?<\/remember>/g, "").trim();
+    }
+
+    // Append to conversation history (keep last 50 messages = 25 exchanges)
+    setChatHistory(prev => [
+      ...prev,
+      { role: "user",      content: text },
+      { role: "assistant", content: txt  },
+    ].slice(-50));
+
     speak(txt);
     setThinking(false);
-  }, [buildContext, apiKey, onAction, speak]);
+  }, [buildContext, apiKey, groqKey, chatHistory, setChatHistory, setMemories, onAction, speak]);
 
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -526,7 +584,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
     setListening(false);
   }, []);
 
-  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, elevenKey, setElevenKey, voiceId, setVoiceId };
+  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, groqKey, setGroqKey, elevenKey, setElevenKey, voiceId, setVoiceId, chatHistory, memories, clearHistory, clearMemories, deleteMemory };
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
@@ -1341,6 +1399,18 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
         <div style={{ fontSize:11, color:C.dim, marginTop:-4 }}>Stored in localStorage only.</div>
       </IntCard>
 
+      <IntCard id="groq" icon="⚡" title="Groq (AI Fallback)"
+        status={jarvis.groqKey ? "Active — instant fallback when Claude is overloaded" : "Not configured — add key to eliminate overload errors"}
+        statusOk={!!jarvis.groqKey}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+          Free API at <span style={{ color:C.cyan }}>console.groq.com</span> → API Keys. No credit card needed.<br/>
+          When Claude is overloaded, Jarvis instantly switches to Groq's Llama model — you won't notice the difference.
+        </div>
+        <HUDInput label="Groq API Key" type="password" placeholder="gsk_..."
+          value={jarvis.groqKey} onChange={e => jarvis.setGroqKey(e.target.value)} />
+        <div style={{ fontSize:11, color:C.dim, marginTop:-4 }}>Free tier: 14,400 requests/day. More than enough.</div>
+      </IntCard>
+
       <IntCard id="eleven" icon="🎙️" title="ElevenLabs Voice"
         status={jarvis.elevenKey ? "Human-quality voice active" : "Using browser TTS — add key for real voice"}
         statusOk={!!jarvis.elevenKey}>
@@ -1503,12 +1573,61 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
         }}>+ ADD WEBHOOK</button>
       )}
 
+      {/* ── MEMORY ── */}
+      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:24, fontWeight:600 }}>MEMORY</div>
+
+      <HUDCard style={{ marginBottom:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Long-Term Memory</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{jarvis.memories.length} fact{jarvis.memories.length !== 1 ? "s" : ""} stored — Jarvis learns these from conversation</div>
+          </div>
+          {jarvis.memories.length > 0 && (
+            <HUDBtn variant="danger" onClick={jarvis.clearMemories}>Clear All</HUDBtn>
+          )}
+        </div>
+        {jarvis.memories.length === 0 ? (
+          <div style={{ fontSize:12, color:C.dim, fontStyle:"italic" }}>
+            No memories yet. Tell Jarvis something: "Remember that I'm in a cut phase" or "Remember I prefer no music before 9am."
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {[...jarvis.memories].reverse().map(m => (
+              <div key={m.id} style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between",
+                padding:"10px 12px", background:"rgba(0,212,255,0.05)", borderRadius:8, border:`1px solid ${C.borderDim}` }}>
+                <div>
+                  <div style={{ fontSize:12, color:C.text, lineHeight:1.5 }}>{m.fact}</div>
+                  <div style={{ fontSize:10, color:C.dim, marginTop:3 }}>{new Date(m.timestamp).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+                </div>
+                <button onClick={() => jarvis.deleteMemory(m.id)} style={{
+                  background:"none", border:"none", color:C.dim, cursor:"pointer",
+                  fontSize:16, padding:"0 0 0 12px", flexShrink:0, lineHeight:1,
+                }}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </HUDCard>
+
+      <HUDCard style={{ marginBottom:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Conversation History</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{Math.floor(jarvis.chatHistory.length / 2)} exchanges stored — last 10 sent with every command</div>
+          </div>
+          {jarvis.chatHistory.length > 0 && (
+            <HUDBtn variant="danger" onClick={jarvis.clearHistory}>Clear</HUDBtn>
+          )}
+        </div>
+      </HUDCard>
+
       {/* ── SYSTEM INFO ── */}
       <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:24, fontWeight:600 }}>SYSTEM</div>
       <HUDCard>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
             ["AI Model",    "Claude Haiku 4.5"],
+            ["AI Fallback", jarvis.groqKey ? "Groq Llama ●" : "None ○"],
             ["Voice STT",   "Web Speech API"],
             ["Voice TTS",   jarvis.elevenKey ? "ElevenLabs ●" : "Browser TTS ○"],
             ["Weather",     "Open-Meteo (free)"],
