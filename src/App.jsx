@@ -287,44 +287,78 @@ function useWeather() {
 }
 
 // ─── JARVIS AI HOOK ────────────────────────────────────────────────────────────
+// ElevenLabs voice IDs — curated natural female voices
+const ELEVEN_VOICES = [
+  { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica (Australian)"     },
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte (British)"      },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily (British)"           },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah (American)"         },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura (American)"         },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda (Warm American)"  },
+];
+const DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // Jessica — Australian female
+
 function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, onAction }) {
-  const [listening, setListening] = useState(false);
-  const [thinking,  setThinking]  = useState(false);
-  const [speaking,  setSpeaking]  = useState(false);
-  const [transcript,setTranscript]= useState("");
-  const [response,  setResponse]  = useState("");
-  const [apiKey,    setApiKey]    = useLocalStorage("jarvis_api_key", "");
-  const recogRef = useRef(null);
-  const voicesRef = useRef([]);
+  const [listening,  setListening]  = useState(false);
+  const [thinking,   setThinking]   = useState(false);
+  const [speaking,   setSpeaking]   = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [response,   setResponse]   = useState("");
+  const [apiKey,     setApiKey]     = useLocalStorage("jarvis_api_key", "");
+  const [elevenKey,  setElevenKey]  = useLocalStorage("jarvis_eleven_key", "");
+  const [voiceId,    setVoiceId]    = useLocalStorage("jarvis_voice_id", DEFAULT_VOICE_ID);
+  const recogRef  = useRef(null);
+  const audioRef  = useRef(null);
 
-  useEffect(() => {
-    const load = () => { voicesRef.current = window.speechSynthesis.getVoices(); };
-    load();
-    window.speechSynthesis.addEventListener("voiceschanged", load);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
-  }, []);
-
-  const speak = useCallback((text) => {
+  const speak = useCallback(async (text) => {
+    // Stop any current playback
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
     window.speechSynthesis.cancel();
+    setResponse(text);
+
+    if (elevenKey) {
+      // ElevenLabs — human-quality voice
+      setSpeaking(true);
+      try {
+        const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || DEFAULT_VOICE_ID}`, {
+          method: "POST",
+          headers: { "xi-api-key": elevenKey, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            model_id: "eleven_multilingual_v2",
+            voice_settings: { stability: 0.42, similarity_boost: 0.88, style: 0.28, use_speaker_boost: true }
+          })
+        });
+        if (!res.ok) throw new Error("ElevenLabs error " + res.status);
+        const blob = await res.blob();
+        const audio = new Audio(URL.createObjectURL(blob));
+        audioRef.current = audio;
+        audio.onended = () => { setSpeaking(false); audioRef.current = null; };
+        audio.onerror = () => { setSpeaking(false); audioRef.current = null; };
+        audio.play();
+      } catch (e) {
+        setSpeaking(false);
+        // Fall back to browser TTS
+        fallbackSpeak(text);
+      }
+    } else {
+      fallbackSpeak(text);
+    }
+  }, [elevenKey, voiceId]);
+
+  const fallbackSpeak = (text) => {
     const u = new SpeechSynthesisUtterance(text);
     u.rate = 0.92; u.pitch = 1.08; u.volume = 1;
-    const voices = voicesRef.current;
-    // Priority: Australian female — sexy, calming, real-sounding
-    const voice =
-      voices.find(v => v.name === "Karen") ||
-      voices.find(v => v.name === "Google Australian English") ||
-      voices.find(v => v.lang === "en-AU" && !v.name.toLowerCase().includes("male")) ||
-      voices.find(v => v.lang === "en-AU") ||
-      voices.find(v => v.name === "Samantha") ||
-      voices.find(v => v.name === "Tessa") ||
-      voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("female")) ||
-      voices.find(v => v.lang.startsWith("en")) || null;
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find(v => v.name === "Karen") ||
+                  voices.find(v => v.lang === "en-AU") ||
+                  voices.find(v => v.name === "Samantha") ||
+                  voices.find(v => v.lang.startsWith("en")) || null;
     if (voice) u.voice = voice;
     u.onstart = () => setSpeaking(true);
     u.onend   = () => setSpeaking(false);
     window.speechSynthesis.speak(u);
-    setResponse(text);
-  }, []);
+  };
 
   const buildContext = useCallback(() => {
     const lw   = measurements.weight.slice(-1)[0]?.val;
@@ -426,7 +460,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
     setListening(false);
   }, []);
 
-  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey };
+  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, elevenKey, setElevenKey, voiceId, setVoiceId };
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
@@ -1169,7 +1203,7 @@ function SleepTab({ sleep, setSleep, notify }) {
 
 // ─── SETTINGS TAB ─────────────────────────────────────────────────────────────
 function SettingsTab({ jarvis, spotify, calendar }) {
-  const [show, setShow] = useState({ claude:false, spotify:false, gcal:false });
+  const [show, setShow] = useState({ claude:false, eleven:false, spotify:false, gcal:false });
   const toggle = k => setShow(s => ({ ...s, [k]:!s[k] }));
 
   const Section = ({ id, title, status, children }) => (
@@ -1204,6 +1238,35 @@ function SettingsTab({ jarvis, spotify, calendar }) {
         <HUDInput label="Anthropic API Key" type="password" placeholder="sk-ant-..."
           value={jarvis.apiKey} onChange={e=>jarvis.setApiKey(e.target.value)} />
         <div style={{ fontSize:11, color:C.dim, marginTop:-6 }}>Stored in localStorage. Never logged or sent anywhere except Anthropic.</div>
+      </Section>
+
+      {/* ElevenLabs Voice */}
+      <Section id="eleven" title="ElevenLabs Voice (Premium TTS)"
+        status={{ ok:!!jarvis.elevenKey, label:jarvis.elevenKey?"Human-quality voice active":"Using browser TTS (robotic) — add key for real voice" }}>
+        <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.6 }}>
+          Get a free API key at <span style={{ color:C.cyan }}>elevenlabs.io</span> → Profile → API Key.<br/>
+          Free tier gives 10,000 characters/month — plenty for daily use.<br/>
+          Jessica is the default: Australian female, calm and natural.
+        </div>
+        <HUDInput label="ElevenLabs API Key" type="password" placeholder="your-elevenlabs-api-key"
+          value={jarvis.elevenKey} onChange={e=>jarvis.setElevenKey(e.target.value)} />
+        <div style={{ fontSize:12, color:C.dim, marginBottom:8, marginTop:4 }}>Voice Selection</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:14 }}>
+          {ELEVEN_VOICES.map(v => (
+            <button key={v.id} onClick={()=>jarvis.setVoiceId(v.id)}
+              style={{
+                padding:"10px 12px", border:`1px solid ${jarvis.voiceId===v.id?C.cyan:C.border}`,
+                background: jarvis.voiceId===v.id ? "rgba(0,212,255,0.12)" : "rgba(0,18,42,0.6)",
+                color: jarvis.voiceId===v.id ? C.cyan : C.text,
+                borderRadius:6, cursor:"pointer", textAlign:"left", fontSize:12,
+                transition:"all 0.2s",
+              }}>
+              {jarvis.voiceId===v.id && <span style={{ marginRight:6 }}>●</span>}
+              {v.name}
+            </button>
+          ))}
+        </div>
+        <div style={{ fontSize:11, color:C.dim }}>API key stored in localStorage only. Falls back to browser TTS if key is missing or request fails.</div>
       </Section>
 
       {/* Spotify */}
@@ -1250,7 +1313,7 @@ function SettingsTab({ jarvis, spotify, calendar }) {
           {[
             ["AI Model",      "Claude Haiku"],
             ["Voice STT",     "Web Speech API"],
-            ["Voice TTS",     "SpeechSynthesis"],
+            ["Voice TTS",     jarvis.elevenKey?"ElevenLabs ●":"Browser TTS ○"],
             ["Weather",       "Open-Meteo"],
             ["Music",         spotify.connected?"Spotify ●":"Spotify ○"],
             ["Calendar",      calendar.connected?"Google ●":"Google ○"],
