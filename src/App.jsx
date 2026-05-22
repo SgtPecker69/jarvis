@@ -122,6 +122,7 @@ const SYNC_KEYS = [
   "jarvis_api_key", "jarvis_groq_key", "jarvis_eleven_key", "jarvis_voice_id",
   "jarvis_spotify_cid",
   "jarvis_gcal_cid",
+  "jarvis_oura_token",
   "jarvis_webhooks",
   "jarvis_memories", "jarvis_memory_file", "jarvis_memory_updated",
   "jarvis_continuous_mode",
@@ -509,6 +510,71 @@ function useCrypto() {
   return { prices, enabled, setEnabled };
 }
 
+// ─── OURA RING HOOK ────────────────────────────────────────────────────────────
+// Helpers — sleep duration in seconds → "7h 30m"
+const fmtDur = (s) => {
+  if (!s) return "—";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return `${h}h ${String(m).padStart(2,"0")}m`;
+};
+const ouraColor = (score) => {
+  if (!score) return C.text;
+  if (score >= 85) return C.green;
+  if (score >= 70) return C.yellow;
+  return C.red;
+};
+
+function useOura() {
+  const [token,   setToken]   = useLocalStorage("jarvis_oura_token", "");
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState(null);
+
+  const connected = !!token;
+
+  const refresh = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    const today = new Date().toISOString().slice(0, 10);
+    const start = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const h = { Authorization: `Bearer ${token}` };
+    const u = (ep) => `https://api.ouraring.com/v2/usercollection/${ep}?start_date=${start}&end_date=${today}`;
+    try {
+      const responses = await Promise.all([
+        fetch(u("daily_readiness"), { headers: h }),
+        fetch(u("daily_sleep"),     { headers: h }),
+        fetch(u("sleep"),           { headers: h }), // sessions — has actual durations
+        fetch(u("daily_activity"),  { headers: h }),
+      ]);
+      const bad = responses.find(r => !r.ok);
+      if (bad) {
+        setError(bad.status === 401 || bad.status === 403
+          ? "Invalid token — check your Oura Personal Access Token"
+          : `Oura API error ${bad.status}`);
+        setLoading(false);
+        return;
+      }
+      const [readiness, dailySleep, sessions, activity] = await Promise.all(responses.map(r => r.json()));
+      setData({
+        readiness:  readiness.data  || [],
+        dailySleep: dailySleep.data || [],
+        sessions:   (sessions.data  || []).filter(s => s.type === "long_sleep"), // primary night sleep only
+        activity:   activity.data   || [],
+      });
+    } catch (e) {
+      setError("Failed to reach Oura API — check your connection");
+    }
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => { if (token) refresh(); }, [token]); // eslint-disable-line
+
+  const disconnect = () => { setToken(""); setData(null); setError(null); };
+
+  return { token, setToken, connected, data, loading, error, refresh, disconnect };
+}
+
 // ─── JARVIS AI HOOK ────────────────────────────────────────────────────────────
 // ElevenLabs voice IDs — pre-made voices, free tier API compatible
 const ELEVEN_VOICES = [
@@ -521,7 +587,7 @@ const ELEVEN_VOICES = [
 ];
 const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel — confirmed free tier
 
-function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction }) {
+function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, oura, onAction }) {
   const [listening,  setListening]  = useState(false);
   const [thinking,   setThinking]   = useState(false);
   const [speaking,   setSpeaking]   = useState(false);
@@ -629,7 +695,7 @@ Calories: ${Math.round(macros.cal)} / ${TARGET_CAL} (${Math.round(TARGET_CAL - m
 Protein:  ${Math.round(macros.protein)}g / ${TARGET_PROTEIN}g (${Math.round(TARGET_PROTEIN - macros.protein)}g remaining)
 Carbs: ${Math.round(macros.carbs)}g | Fat: ${Math.round(macros.fat)}g
 
-BODY: Weight: ${lw ? lw + " lbs" : "not logged"} | Waist: ${lwa ? lwa + " cm (target 81-84cm)" : "not logged"} | Avg sleep (7d): ${avgS ? avgS + " hrs" : "no data"}
+BODY: Weight: ${lw ? lw + " lbs" : "not logged"} | Waist: ${lwa ? lwa + " cm (target 81-84cm)" : "not logged"} | Avg sleep (7d): ${avgS ? avgS + " hrs" : "no data"}${(() => { const r = oura?.data?.readiness?.slice(-1)[0]; const sl = oura?.data?.dailySleep?.slice(-1)[0]; const ses = oura?.data?.sessions?.slice(-1)[0]; return r || sl ? `\nOURA: Readiness ${r?.score ?? "—"}/100 | Sleep score ${sl?.score ?? "—"}/100 | Last night ${fmtDur(ses?.total_sleep_duration)} total (REM ${fmtDur(ses?.rem_sleep_duration)}, Deep ${fmtDur(ses?.deep_sleep_duration)})` : ""; })()}
 
 ENVIRONMENT: Hue ${hue.connected ? "connected (" + hue.lights.length + " lights)" : "disconnected"} | Coffee: ${coffeeOn ? "on" : "off"} | Weather: ${weather.data ? Math.round(weather.data.temperature_2m) + "°F " + wxDesc(weather.data.weather_code) + (weather.city ? " in " + weather.city : "") : "unavailable"}${crypto?.prices ? `
 CRYPTO: BTC $${crypto.prices.bitcoin?.usd?.toLocaleString()} (${crypto.prices.bitcoin?.usd_24h_change?.toFixed(1)}% 24h) | ETH $${crypto.prices.ethereum?.usd?.toLocaleString()} | SOL $${crypto.prices.solana?.usd?.toFixed(2)}` : ""}
@@ -660,7 +726,7 @@ For play:, extract ONLY the song title and artist. Example: "play Fancy by Drake
 
 CUSTOM WEBHOOKS (use webhook action with the exact id when triggered):
 ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}" triggers on: ${w.triggers} — ${w.description}`).join('\n')}` : ''}`;
-  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, memories, memoryFile]);
+  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, oura, memories, memoryFile]);
 
   const processCommand = useCallback(async (text) => {
     setThinking(true);
@@ -1205,7 +1271,7 @@ function NowPlaying({ spotify }) {
 }
 
 // ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
-function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, weather, jarvis, coffeeOn }) {
+function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
   const [time, setTime] = useState(timeStr());
   const [cmd,  setCmd]  = useState("");
 
@@ -1413,17 +1479,37 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
       </HUDCard>
 
       {/* ── Body & Recovery ── */}
-      <HUDCard title="Body & Recovery">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-          <Metric label="Weight" value={lw || "—"} unit="lbs" color={C.text} />
-          <Metric label="Waist" value={lwa || "—"} unit="cm" sub="Target 81-84"
-            color={!lwa ? C.text : lwa <= 84 ? C.green : C.orange}
-            pct={lwa ? Math.max(0, Math.min(100, (1-(lwa-83)/10)*100)) : 0}
-            barColor={lwa && lwa <= 84 ? C.green : C.orange} />
-          <Metric label="Avg Sleep" value={avgS || "—"} unit="hrs"
-            color={!avgS ? C.text : parseFloat(avgS) >= 7 ? C.green : C.red} />
-        </div>
-      </HUDCard>
+      {(() => {
+        const oR  = oura?.data?.readiness?.slice(-1)[0];
+        const oSl = oura?.data?.dailySleep?.slice(-1)[0];
+        const oSe = oura?.data?.sessions?.slice(-1)[0];
+        return (
+          <HUDCard title="Body & Recovery" accent={oura?.connected ? C.green : C.cyan}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+              <Metric label="Weight" value={lw || "—"} unit="lbs" color={C.text} />
+              <Metric label="Waist" value={lwa || "—"} unit="cm" sub="Target 81-84"
+                color={!lwa ? C.text : lwa <= 84 ? C.green : C.orange}
+                pct={lwa ? Math.max(0, Math.min(100, (1-(lwa-83)/10)*100)) : 0}
+                barColor={lwa && lwa <= 84 ? C.green : C.orange} />
+              {oura?.connected && oura?.data
+                ? <Metric label="Readiness" value={oR?.score ?? "—"}
+                    sub={oR?.score >= 85 ? "Optimal" : oR?.score >= 70 ? "Good" : oR?.score ? "Low" : "Loading…"}
+                    color={ouraColor(oR?.score)} pct={oR?.score} barColor={ouraColor(oR?.score)} />
+                : <Metric label="Avg Sleep" value={avgS || "—"} unit="hrs"
+                    color={!avgS ? C.text : parseFloat(avgS) >= 7 ? C.green : C.red} />
+              }
+            </div>
+            {oura?.connected && oura?.data && (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginTop:10 }}>
+                <Metric label="Sleep Score" value={oSl?.score ?? "—"}
+                  color={ouraColor(oSl?.score)} pct={oSl?.score} barColor={ouraColor(oSl?.score)} />
+                <Metric label="Last Night" value={fmtDur(oSe?.total_sleep_duration)} color={C.text} />
+                <Metric label="REM" value={fmtDur(oSe?.rem_sleep_duration)} color={C.purple} />
+              </div>
+            )}
+          </HUDCard>
+        );
+      })()}
 
       {/* ── Calendar ── */}
       {calendar.connected && calendar.events.length > 0 && (
@@ -1815,8 +1901,9 @@ function BodyTab({ measurements, setMeasurements, notify }) {
 }
 
 // ─── SLEEP TAB ────────────────────────────────────────────────────────────────
-function SleepTab({ sleep, setSleep, notify }) {
-  const [inp, setInp] = useState({ hours:"", bedtime:"" });
+function SleepTab({ sleep, setSleep, notify, oura }) {
+  const [inp,     setInp]     = useState({ hours:"", bedtime:"" });
+  const [patInp,  setPatInp]  = useState("");
   const avgS = sleep.length ? (sleep.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sleep.length,7)).toFixed(1) : null;
   const debt = avgS ? Math.max(0,(8-parseFloat(avgS))*7).toFixed(1) : null;
 
@@ -1828,8 +1915,104 @@ function SleepTab({ sleep, setSleep, notify }) {
     notify("Sleep logged", "success");
   };
 
+  // ── Oura derived metrics ──
+  const oR  = oura?.data?.readiness?.slice(-1)[0];
+  const oSl = oura?.data?.dailySleep?.slice(-1)[0];
+  const oSe = oura?.data?.sessions?.slice(-1)[0];
+  const oAct= oura?.data?.activity?.slice(-1)[0];
+  const oAvgSleep = oura?.data?.sessions?.length
+    ? (oura.data.sessions.slice(-7).reduce((a,s)=>a+(s.total_sleep_duration||0),0) / Math.min(oura.data.sessions.slice(-7).length,7))
+    : null;
+  const oDebt = oAvgSleep ? Math.max(0, (8*3600 - oAvgSleep) * 7 / 3600).toFixed(1) : null;
+
   return (
     <>
+      {/* ── Oura Ring Section ── */}
+      {!oura?.connected ? (
+        <HUDCard title="Oura Ring" accent={C.purple}>
+          <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+            Connect your Oura Ring to see real-time readiness, sleep quality, and recovery metrics.{" "}
+            <a href="https://cloud.ouraring.com/personal-access-tokens" target="_blank" rel="noreferrer"
+              style={{ color:C.cyan, textDecoration:"none" }}>
+              Get your Personal Access Token ↗
+            </a>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <HUDInput label="Personal Access Token" type="password" placeholder="Paste token here..."
+              value={patInp} onChange={e=>setPatInp(e.target.value)}
+              style={{ marginBottom:0, flex:1 }} />
+          </div>
+          <HUDBtn variant="primary" style={{ marginTop:10 }} onClick={() => {
+            if (!patInp.trim()) { notify("Paste your Oura token", "error"); return; }
+            oura.setToken(patInp.trim());
+            setPatInp("");
+            notify("Oura token saved — loading data…", "success");
+          }}>Connect Oura Ring</HUDBtn>
+        </HUDCard>
+      ) : (
+        <>
+          <HUDCard title="Oura Ring" accent={C.purple}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ width:8, height:8, borderRadius:"50%", background:C.green, boxShadow:`0 0 6px ${C.green}` }} />
+                <span style={{ fontSize:12, color:C.green, fontWeight:600 }}>Connected</span>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <HUDBtn onClick={oura.refresh} style={{ padding:"5px 12px", fontSize:11 }}
+                  disabled={oura.loading}>{oura.loading ? "Loading…" : "↻ Refresh"}</HUDBtn>
+                <HUDBtn onClick={oura.disconnect} style={{ padding:"5px 12px", fontSize:11, color:C.red, borderColor:C.red+"44" }}>
+                  Disconnect
+                </HUDBtn>
+              </div>
+            </div>
+
+            {oura.error && (
+              <div style={{ padding:"8px 12px", borderRadius:8, background:"rgba(255,18,68,0.08)", border:`1px solid ${C.red}33`,
+                fontSize:12, color:C.red, marginBottom:14 }}>{oura.error}</div>
+            )}
+
+            {oura.data && (
+              <>
+                {/* Row 1: readiness + sleep score + activity */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:10 }}>
+                  <Metric label="Readiness" value={oR?.score ?? "—"}
+                    sub={oR?.score >= 85 ? "Optimal" : oR?.score >= 70 ? "Good" : oR?.score ? "Low" : "—"}
+                    color={ouraColor(oR?.score)} pct={oR?.score} barColor={ouraColor(oR?.score)} />
+                  <Metric label="Sleep Score" value={oSl?.score ?? "—"}
+                    sub={oSl?.score >= 85 ? "Excellent" : oSl?.score >= 70 ? "Good" : oSl?.score ? "Fair" : "—"}
+                    color={ouraColor(oSl?.score)} pct={oSl?.score} barColor={ouraColor(oSl?.score)} />
+                  <Metric label="Activity" value={oAct?.score ?? "—"}
+                    sub={oAct?.score >= 85 ? "High" : oAct?.score >= 70 ? "Good" : oAct?.score ? "Low" : "—"}
+                    color={ouraColor(oAct?.score)} pct={oAct?.score} barColor={ouraColor(oAct?.score)} />
+                </div>
+
+                {/* Row 2: last night breakdown */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:10 }}>
+                  <Metric label="Total Sleep" value={fmtDur(oSe?.total_sleep_duration)} color={C.text} />
+                  <Metric label="REM" value={fmtDur(oSe?.rem_sleep_duration)} color={C.purple} />
+                  <Metric label="Deep" value={fmtDur(oSe?.deep_sleep_duration)} color={C.blue} />
+                </div>
+
+                {/* Row 3: 7d avg + sleep debt */}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10 }}>
+                  <Metric label="7-Day Avg Sleep"
+                    value={oAvgSleep ? fmtDur(oAvgSleep) : "—"} color={C.text} />
+                  <Metric label="Sleep Debt (8h target)"
+                    value={oDebt ? `${oDebt}h` : "—"}
+                    color={!oDebt ? C.text : parseFloat(oDebt) > 5 ? C.red : parseFloat(oDebt) > 2 ? C.yellow : C.green} />
+                </div>
+              </>
+            )}
+
+            {!oura.data && !oura.loading && !oura.error && (
+              <div style={{ fontSize:12, color:C.dim, textAlign:"center", padding:"16px 0" }}>
+                No data yet — tap Refresh to load your Oura metrics.
+              </div>
+            )}
+          </HUDCard>
+        </>
+      )}
+
       <HUDCard title="Log Sleep">
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
           <HUDInput label="Hours Slept" type="number" step="0.5" placeholder="7.5"
@@ -2335,6 +2518,7 @@ export default function Jarvis() {
   const weather    = useWeather();
   const webhooks   = useWebhooks();
   const crypto     = useCrypto();
+  const oura       = useOura();
   const cloudSync  = useCloudSync();
   const speakRef   = useRef(null); // always-current speak fn for handlers defined before jarvis
 
@@ -2428,7 +2612,7 @@ export default function Jarvis() {
     }
   }, [applyScene, spotify, setMacros, setCoffeeOn, webhooks, macros, coffeeOn]);
 
-  const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction:handleAction });
+  const jarvis = useJarvisAI({ macros, measurements, sleep, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, oura, onAction:handleAction });
   speakRef.current = jarvis.speak; // keep ref fresh every render
 
   const TABS = [
@@ -2511,6 +2695,7 @@ export default function Jarvis() {
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
                 <StatusDot on={spotify.connected}  label={spotify.connected && spotify.expiry && (spotify.expiry - Date.now() < 10*60*1000) ? "Spotify ⚠" : "Spotify"}  />
                 <StatusDot on={calendar.connected} label={calendar.connected && calendar.expiry && (calendar.expiry - Date.now() < 10*60*1000) ? "Cal ⚠" : "Cal"}      />
+                <StatusDot on={oura.connected}     label="Oura"     />
                 <StatusDot on={hue.connected}      label="Hue"      />
               </div>
             </div>
@@ -2552,12 +2737,12 @@ export default function Jarvis() {
 
       {/* Content */}
       <div style={{ padding:"24px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
-        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} />}
+        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
         {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
         {tab==="recipes"       && <RecipesTab />}
         {tab==="body"          && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
-        {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} />}
+        {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} oura={oura} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} cloudSync={cloudSync} />}
       </div>
 
