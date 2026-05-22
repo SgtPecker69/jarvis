@@ -354,13 +354,16 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
   const [groqKey,     setGroqKey]    = useLocalStorage("jarvis_groq_key", "");
   const [elevenKey,   setElevenKey]  = useLocalStorage("jarvis_eleven_key", "");
   const [voiceId,     setVoiceId]    = useLocalStorage("jarvis_voice_id", DEFAULT_VOICE_ID);
-  const [chatHistory, setChatHistory]= useLocalStorage("jarvis_chat_history", []);
-  const [memories,    setMemories]   = useLocalStorage("jarvis_memories", []);
+  const [chatHistory,   setChatHistory]  = useLocalStorage("jarvis_chat_history", []);
+  const [memories,      setMemories]     = useLocalStorage("jarvis_memories", []);
+  const [memoryFile,    setMemoryFile]   = useLocalStorage("jarvis_memory_file", "");
+  const [memoryUpdated, setMemoryUpdated]= useLocalStorage("jarvis_memory_updated", null);
+  const updatingMemory = useRef(false);
   const recogRef  = useRef(null);
   const audioRef  = useRef(null);
 
   const clearHistory  = useCallback(() => setChatHistory([]), []);
-  const clearMemories = useCallback(() => setMemories([]), []);
+  const clearMemories = useCallback(() => { setMemories([]); setMemoryFile(""); setMemoryUpdated(null); }, []);
   const deleteMemory  = useCallback((id) => setMemories(m => m.filter(x => x.id !== id)), []);
 
   const speak = useCallback(async (text) => {
@@ -441,10 +444,14 @@ SPOTIFY: ${np?.is_playing ? `Playing "${np.item?.name}" by ${np.item?.artists?.[
 
 CALENDAR: ${calendar.events?.length ? calendar.events.map(e => e.summary + (e.start?.dateTime ? " at " + new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "")).join("; ") : "No events today"}
 
-LONG-TERM MEMORY (facts you've learned about Mark — always factor these in):
-${memories.length ? memories.map(m => `- ${m.fact}`).join('\n') : "No memories stored yet."}
+JARVIS MEMORY FILE — your living knowledge of Mark (maintained and updated over time):
+${memoryFile || "Memory file not yet initialised. Begin building it as you learn about Mark."}
 
-When Mark tells you something worth remembering (a preference, goal, fact about himself, or anything he explicitly asks you to remember), append: <remember>one-sentence fact</remember>
+ADDITIONAL MEMORY NOTES:
+${memories.length ? memories.map(m => `- ${m.fact}`).join('\n') : "None yet."}
+
+When Mark tells you something worth remembering or you observe something significant, append: <remember>one-sentence fact</remember>
+When Mark explicitly asks you to remember something important, be sure to confirm you've noted it.
 
 AVAILABLE ACTIONS (append to end of response, only when taking an action):
 <action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
@@ -456,7 +463,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
 
 CUSTOM WEBHOOKS (use webhook action with the exact id when triggered):
 ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}" triggers on: ${w.triggers} — ${w.description}`).join('\n')}` : ''}`;
-  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, memories]);
+  }, [macros, measurements, sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, memories, memoryFile]);
 
   const processCommand = useCallback(async (text) => {
     setThinking(true);
@@ -554,16 +561,53 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
       txt = txt.replace(/<remember>[\s\S]*?<\/remember>/g, "").trim();
     }
 
-    // Append to conversation history (keep last 50 messages = 25 exchanges)
-    setChatHistory(prev => [
-      ...prev,
+    // Append to conversation history (keep last 60 messages = 30 exchanges)
+    const newHistory = [
+      ...chatHistory,
       { role: "user",      content: text },
       { role: "assistant", content: txt  },
-    ].slice(-50));
+    ].slice(-60);
+    setChatHistory(newHistory);
 
     speak(txt);
     setThinking(false);
-  }, [buildContext, apiKey, groqKey, chatHistory, setChatHistory, setMemories, onAction, speak]);
+
+    // Update memory file every 5 exchanges, non-blocking
+    const exchangeCount = Math.floor(newHistory.length / 2);
+    if (exchangeCount > 0 && exchangeCount % 5 === 0 && !updatingMemory.current) {
+      updatingMemory.current = true;
+      const recentConvo = newHistory.slice(-20).map(m =>
+        `${m.role === "user" ? "Mark" : "JARVIS"}: ${m.content}`
+      ).join('\n');
+      const memPrompt = `You are JARVIS maintaining a memory file about Mark. Based on the recent conversation, update his comprehensive profile. Include everything you know: personality, preferences, goals (short and long term), fitness routine, diet, sleep habits, smart home setup, what he's currently working on, recurring patterns, notable things he's said, his communication style, and anything else significant. Write it as a rich, detailed profile in second person ("Mark is...", "He prefers..."). Be comprehensive — this is your permanent knowledge base about him. Under 400 words. Return ONLY the profile text.\n\nCURRENT MEMORY FILE:\n${memoryFile || "Not yet initialised."}\n\nRECENT CONVERSATION:\n${recentConvo}`;
+      const doUpdate = async () => {
+        try {
+          let result;
+          if (apiKey) {
+            const r = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
+              body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system: "You maintain JARVIS's memory file about Mark. Return only the updated profile text.", messages: [{ role: "user", content: memPrompt }] })
+            });
+            const d = await r.json();
+            result = d?.content?.[0]?.text;
+          }
+          if (!result && groqKey) {
+            const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ model: "llama3-8b-8192", max_tokens: 600, messages: [{ role: "system", content: "You maintain JARVIS's memory file. Return only the updated profile text." }, { role: "user", content: memPrompt }] })
+            });
+            const d = await r.json();
+            result = d?.choices?.[0]?.message?.content;
+          }
+          if (result) { setMemoryFile(result); setMemoryUpdated(new Date().toISOString()); }
+        } catch {}
+        updatingMemory.current = false;
+      };
+      doUpdate();
+    }
+  }, [buildContext, apiKey, groqKey, chatHistory, setChatHistory, memoryFile, setMemoryFile, setMemoryUpdated, setMemories, onAction, speak]);
 
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -584,7 +628,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
     setListening(false);
   }, []);
 
-  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, groqKey, setGroqKey, elevenKey, setElevenKey, voiceId, setVoiceId, chatHistory, memories, clearHistory, clearMemories, deleteMemory };
+  return { listening, thinking, speaking, transcript, response, startListening, stopListening, speak, processCommand, apiKey, setApiKey, groqKey, setGroqKey, elevenKey, setElevenKey, voiceId, setVoiceId, chatHistory, memories, memoryFile, setMemoryFile, memoryUpdated, clearHistory, clearMemories, deleteMemory };
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
@@ -1576,32 +1620,67 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
       {/* ── MEMORY ── */}
       <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, marginTop:24, fontWeight:600 }}>MEMORY</div>
 
+      {/* Living Memory File */}
       <HUDCard style={{ marginBottom:10 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Long-Term Memory</div>
-            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{jarvis.memories.length} fact{jarvis.memories.length !== 1 ? "s" : ""} stored — Jarvis learns these from conversation</div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>◆ JARVIS Memory File</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>
+              {jarvis.memoryUpdated
+                ? `Last updated ${new Date(jarvis.memoryUpdated).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})} · Auto-deepens every 5 exchanges`
+                : "Auto-builds after 5 conversations — grows richer over time"}
+            </div>
           </div>
-          {jarvis.memories.length > 0 && (
-            <HUDBtn variant="danger" onClick={jarvis.clearMemories}>Clear All</HUDBtn>
-          )}
+          {jarvis.memoryFile && <HUDBtn variant="danger" onClick={() => { jarvis.setMemoryFile(""); }}>Reset</HUDBtn>}
         </div>
-        {jarvis.memories.length === 0 ? (
-          <div style={{ fontSize:12, color:C.dim, fontStyle:"italic" }}>
-            No memories yet. Tell Jarvis something: "Remember that I'm in a cut phase" or "Remember I prefer no music before 9am."
+        {jarvis.memoryFile ? (
+          <div style={{ position:"relative" }}>
+            <textarea
+              value={jarvis.memoryFile}
+              onChange={e => jarvis.setMemoryFile(e.target.value)}
+              style={{
+                width:"100%", minHeight:180, padding:"12px", borderRadius:8, resize:"vertical",
+                background:"rgba(0,212,255,0.04)", border:`1px solid ${C.cyan}33`,
+                color:C.text, fontSize:12, lineHeight:1.7, fontFamily:"inherit",
+                boxSizing:"border-box",
+              }}
+            />
+            <div style={{ fontSize:10, color:C.dim, marginTop:6 }}>
+              You can edit this directly — Jarvis will use whatever's here as its knowledge of you.
+            </div>
           </div>
         ) : (
+          <div style={{ padding:"16px 12px", background:"rgba(0,212,255,0.03)", borderRadius:8,
+            border:`1px dashed ${C.cyan}22`, textAlign:"center" }}>
+            <div style={{ fontSize:12, color:C.dim, marginBottom:8 }}>Memory file not yet built.</div>
+            <div style={{ fontSize:11, color:C.dim, lineHeight:1.6 }}>
+              Have 5 conversations with Jarvis and it will automatically synthesise everything it's learned into a permanent profile — your preferences, goals, habits, personality, and everything you've told it.
+            </div>
+          </div>
+        )}
+      </HUDCard>
+
+      {/* Memory Notes */}
+      <HUDCard style={{ marginBottom:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:jarvis.memories.length ? 12 : 0 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Memory Notes</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{jarvis.memories.length} note{jarvis.memories.length !== 1 ? "s" : ""} · Tell Jarvis "remember that…" to add one</div>
+          </div>
+          {jarvis.memories.length > 0 && <HUDBtn variant="danger" onClick={jarvis.clearMemories}>Clear</HUDBtn>}
+        </div>
+        {jarvis.memories.length > 0 && (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {[...jarvis.memories].reverse().map(m => (
               <div key={m.id} style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between",
-                padding:"10px 12px", background:"rgba(0,212,255,0.05)", borderRadius:8, border:`1px solid ${C.borderDim}` }}>
+                padding:"10px 12px", background:"rgba(0,212,255,0.04)", borderRadius:8, border:`1px solid ${C.borderDim}` }}>
                 <div>
                   <div style={{ fontSize:12, color:C.text, lineHeight:1.5 }}>{m.fact}</div>
                   <div style={{ fontSize:10, color:C.dim, marginTop:3 }}>{new Date(m.timestamp).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
                 </div>
                 <button onClick={() => jarvis.deleteMemory(m.id)} style={{
                   background:"none", border:"none", color:C.dim, cursor:"pointer",
-                  fontSize:16, padding:"0 0 0 12px", flexShrink:0, lineHeight:1,
+                  fontSize:16, padding:"0 0 0 12px", flexShrink:0,
                 }}>✕</button>
               </div>
             ))}
@@ -1609,15 +1688,14 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
         )}
       </HUDCard>
 
+      {/* Conversation History */}
       <HUDCard style={{ marginBottom:10 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div>
             <div style={{ fontSize:13, fontWeight:600, color:C.text }}>Conversation History</div>
-            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{Math.floor(jarvis.chatHistory.length / 2)} exchanges stored — last 10 sent with every command</div>
+            <div style={{ fontSize:11, color:C.dim, marginTop:2 }}>{Math.floor(jarvis.chatHistory.length / 2)} exchanges stored · last 10 sent with every command</div>
           </div>
-          {jarvis.chatHistory.length > 0 && (
-            <HUDBtn variant="danger" onClick={jarvis.clearHistory}>Clear</HUDBtn>
-          )}
+          {jarvis.chatHistory.length > 0 && <HUDBtn variant="danger" onClick={jarvis.clearHistory}>Clear</HUDBtn>}
         </div>
       </HUDCard>
 
