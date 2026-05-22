@@ -2040,85 +2040,566 @@ function EnvironmentTab({ hue, setHue, coffeeOn, setCoffeeOn, sceneLoading, appl
   );
 }
 
+// ─── RECIPE DETAIL MODAL ──────────────────────────────────────────────────────
+function RecipeDetailModal({ recipe, onClose, onSave, onDelete }) {
+  const [editMode, setEditMode] = useState(false);
+  const [edit, setEdit] = useState({
+    ingredients:  recipe.ingredients?.join("\n")  || "",
+    instructions: recipe.instructions?.join("\n") || "",
+    imageUrl:     recipe.imageUrl || "",
+  });
+
+  const hasDetails = recipe.ingredients?.length > 0 || recipe.instructions?.length > 0;
+  const heroSrc    = recipe.imageData || recipe.imageUrl || "";
+  const mealMap    = { 1:"Breakfast", 2:"Lunch", 3:"Dinner", 4:"Post-workout", 5:"Dessert" };
+
+  const save = () => {
+    onSave({
+      ...recipe,
+      ingredients:  edit.ingredients.split("\n").map(s=>s.trim()).filter(Boolean),
+      instructions: edit.instructions.split("\n").map(s=>s.trim()).filter(Boolean),
+      imageUrl:     edit.imageUrl.trim(),
+    });
+    setEditMode(false);
+  };
+
+  const ta = { width:"100%", background:"rgba(0,200,255,0.04)", border:`1px solid ${C.border}`,
+    borderRadius:8, padding:"10px 14px", color:C.text, fontSize:13, outline:"none",
+    fontFamily:"inherit", boxSizing:"border-box", resize:"vertical", lineHeight:1.6 };
+
+  return (
+    <div onClick={e => e.target === e.currentTarget && onClose()}
+      style={{ position:"fixed", inset:0, zIndex:500, background:"rgba(0,3,10,0.93)",
+        backdropFilter:"blur(14px) saturate(160%)", overflowY:"auto",
+        padding:"16px", display:"flex", justifyContent:"center" }}>
+      <div style={{ width:"100%", maxWidth:680, height:"fit-content",
+        background:"rgba(0,8,22,0.99)", border:`1px solid ${C.cyan}18`,
+        borderRadius:16, overflow:"hidden", marginTop:16, marginBottom:40,
+        boxShadow:`0 32px 80px rgba(0,0,0,0.9), 0 0 60px ${C.purple}0A`,
+        animation:"fadeInUp 0.22s ease" }}>
+
+        {/* Hero */}
+        {heroSrc ? (
+          <div style={{ position:"relative", height:200, overflow:"hidden" }}>
+            <img src={heroSrc} alt={recipe.name}
+              style={{ width:"100%", height:"100%", objectFit:"cover", opacity:0.75 }} />
+            <div style={{ position:"absolute", inset:0,
+              background:"linear-gradient(to bottom, rgba(0,3,10,0.25) 0%, rgba(0,8,22,0.96) 100%)" }} />
+            <button onClick={onClose} style={{ position:"absolute", top:12, right:12,
+              width:32, height:32, background:"rgba(0,0,0,0.55)", backdropFilter:"blur(8px)",
+              border:`1px solid ${C.border}`, borderRadius:"50%", color:C.text,
+              cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+          </div>
+        ) : (
+          <div style={{ display:"flex", justifyContent:"flex-end", padding:"14px 20px 0" }}>
+            <button onClick={onClose} style={{ background:"none", border:"none",
+              color:C.dim, cursor:"pointer", fontSize:22, lineHeight:1, padding:4 }}>×</button>
+          </div>
+        )}
+
+        <div style={{ padding: heroSrc ? "0 20px 28px" : "4px 20px 28px" }}>
+          {/* Title row */}
+          <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between",
+            gap:12, marginBottom:16, marginTop: heroSrc ? -4 : 12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:22, fontWeight:700, color:C.textBright, lineHeight:1.2, marginBottom:8 }}>
+                {recipe.name}
+              </div>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                {recipe.cuisine && (
+                  <span style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
+                    background:`${C.purple}12`, color:C.purple, border:`1px solid ${C.purple}30` }}>
+                    {recipe.cuisine}</span>
+                )}
+                {recipe.meal?.map(m => (
+                  <span key={m} style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
+                    background:"rgba(0,200,255,0.07)", color:C.cyan, border:`1px solid ${C.border}` }}>
+                    {mealMap[m]||`Meal ${m}`}</span>
+                ))}
+                {recipe.tags?.map(t => (
+                  <span key={t} style={{ padding:"2px 8px", borderRadius:3, fontSize:10,
+                    color:C.dim, border:`1px solid ${C.borderDim}` }}>{t}</span>
+                ))}
+                {recipe.source !== "builtin" && (
+                  <span style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:700,
+                    background:`${C.green}10`, color:C.green, border:`1px solid ${C.green}25` }}>Imported</span>
+                )}
+              </div>
+            </div>
+            <div style={{ textAlign:"right", flexShrink:0 }}>
+              <div style={{ fontSize:30, fontWeight:700, color:C.cyan, lineHeight:1 }}>{recipe.cal}</div>
+              <div style={{ fontSize:11, color:C.dim }}>cal · {recipe.time}min</div>
+            </div>
+          </div>
+
+          {/* Macro bars */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:22,
+            padding:"14px 0", borderTop:`1px solid ${C.borderDim}`, borderBottom:`1px solid ${C.borderDim}` }}>
+            {[
+              { label:"Protein", value:recipe.protein, color:C.green,  max:60  },
+              { label:"Carbs",   value:recipe.carbs,   color:C.cyan,   max:120 },
+              { label:"Fat",     value:recipe.fat,     color:C.orange, max:50  },
+            ].map(m => (
+              <div key={m.label} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:22, fontWeight:700, color:m.color }}>
+                  {m.value}<span style={{ fontSize:12, color:C.dim }}>g</span>
+                </div>
+                <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:5 }}>
+                  {m.label.toUpperCase()}
+                </div>
+                <div style={{ height:3, borderRadius:3, background:C.borderDim }}>
+                  <div style={{ width:`${Math.min(100,(m.value/m.max)*100)}%`, height:"100%",
+                    background:m.color, borderRadius:3, boxShadow:`0 0 6px ${m.color}66` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {!editMode ? (
+            <>
+              {recipe.ingredients?.length > 0 && (
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:10, color:C.dimMid, letterSpacing:"0.14em", fontWeight:700, marginBottom:10 }}>
+                    INGREDIENTS
+                  </div>
+                  {recipe.ingredients.map((ing, i) => (
+                    <div key={i} style={{ display:"flex", gap:8, fontSize:13, color:C.text,
+                      lineHeight:1.5, marginBottom:5 }}>
+                      <span style={{ color:C.cyan, fontWeight:700, flexShrink:0 }}>·</span>{ing}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {recipe.instructions?.length > 0 && (
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:10, color:C.dimMid, letterSpacing:"0.14em", fontWeight:700, marginBottom:10 }}>
+                    INSTRUCTIONS
+                  </div>
+                  {recipe.instructions.map((step, i) => (
+                    <div key={i} style={{ display:"flex", gap:10, fontSize:13, color:C.text,
+                      lineHeight:1.55, marginBottom:10 }}>
+                      <div style={{ minWidth:24, height:24, borderRadius:"50%", flexShrink:0,
+                        background:`${C.purple}18`, border:`1px solid ${C.purple}35`,
+                        color:C.purple, fontSize:11, fontWeight:700,
+                        display:"flex", alignItems:"center", justifyContent:"center", marginTop:1 }}>{i+1}</div>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!hasDetails && (
+                <div style={{ padding:"20px", borderRadius:8, textAlign:"center",
+                  background:"rgba(255,255,255,0.015)", border:`1px dashed ${C.borderDim}`, marginBottom:18 }}>
+                  <div style={{ fontSize:28, marginBottom:8 }}>📝</div>
+                  <div style={{ fontSize:13, color:C.dim }}>
+                    No details yet — tap below to add ingredients and instructions
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display:"flex", gap:8 }}>
+                <HUDBtn onClick={() => setEditMode(true)} style={{ flex:1 }}>
+                  {hasDetails ? "✏ Edit Recipe" : "+ Add Details"}
+                </HUDBtn>
+                {recipe.source !== "builtin" && (
+                  <HUDBtn variant="danger" onClick={() => { onDelete(); onClose(); }}
+                    style={{ padding:"9px 14px" }}>Delete</HUDBtn>
+                )}
+              </div>
+            </>
+          ) : (
+            <div>
+              <HUDInput label="Photo URL (optional)"
+                placeholder="https://example.com/photo.jpg"
+                value={edit.imageUrl}
+                onChange={e => setEdit({...edit, imageUrl:e.target.value})} />
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:9, letterSpacing:"0.18em", textTransform:"uppercase",
+                  color:C.dimMid, marginBottom:6, fontWeight:600 }}>INGREDIENTS — one per line</div>
+                <textarea value={edit.ingredients} rows={7}
+                  onChange={e => setEdit({...edit, ingredients:e.target.value})}
+                  placeholder={"200g chicken breast\n1 tbsp olive oil\n2 cloves garlic\n..."} style={ta} />
+              </div>
+              <div style={{ marginBottom:18 }}>
+                <div style={{ fontSize:9, letterSpacing:"0.18em", textTransform:"uppercase",
+                  color:C.dimMid, marginBottom:6, fontWeight:600 }}>INSTRUCTIONS — one step per line</div>
+                <textarea value={edit.instructions} rows={7}
+                  onChange={e => setEdit({...edit, instructions:e.target.value})}
+                  placeholder={"Preheat oven to 400°F.\nSeason chicken with salt and pepper.\n..."} style={ta} />
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <HUDBtn variant="success" onClick={save} style={{ flex:1 }}>Save Recipe</HUDBtn>
+                <HUDBtn onClick={() => {
+                  setEdit({ ingredients:recipe.ingredients?.join("\n")||"",
+                    instructions:recipe.instructions?.join("\n")||"", imageUrl:recipe.imageUrl||"" });
+                  setEditMode(false);
+                }}>Cancel</HUDBtn>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── RECIPE CARD ──────────────────────────────────────────────────────────────
+function RecipeCard({ recipe, onSelect }) {
+  const [hov, setHov] = useState(false);
+  const hasImg = recipe.imageData || recipe.imageUrl;
+  const mealShort = { 1:"B", 2:"L", 3:"D", 4:"PW", 5:"DS" };
+
+  return (
+    <div onClick={() => onSelect(recipe)}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ border:`1px solid ${hov ? C.cyan+"44" : C.borderDim}`,
+        borderRadius:10, marginBottom:8, cursor:"pointer", overflow:"hidden",
+        background: hov ? "rgba(0,200,255,0.025)" : "rgba(0,212,255,0.015)",
+        transition:"all 0.18s",
+        boxShadow: hov ? `0 4px 20px rgba(0,0,0,0.3), 0 0 0 1px ${C.cyan}11` : "none" }}>
+
+      {hasImg && (
+        <div style={{ height:90, overflow:"hidden", position:"relative" }}>
+          <img src={recipe.imageData || recipe.imageUrl} alt={recipe.name}
+            style={{ width:"100%", height:"100%", objectFit:"cover",
+              opacity: hov ? 0.8 : 0.65, transition:"opacity 0.2s" }} />
+          <div style={{ position:"absolute", inset:0,
+            background:"linear-gradient(to bottom, transparent 20%, rgba(0,8,22,0.92))" }} />
+        </div>
+      )}
+
+      <div style={{ padding: hasImg ? "8px 14px 12px" : "13px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:3, flexWrap:"wrap" }}>
+              {recipe.source !== "builtin" && (
+                <span style={{ fontSize:9, padding:"1px 6px", borderRadius:3, fontWeight:700,
+                  background:`${C.green}12`, color:C.green, border:`1px solid ${C.green}25`,
+                  letterSpacing:"0.05em", flexShrink:0 }}>IMPORTED</span>
+              )}
+              <span style={{ fontSize:10, color:C.dim }}>#{recipe.id}</span>
+              <span style={{ fontSize:14, fontWeight:600, color:C.textBright,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                maxWidth:"calc(100% - 40px)" }}>{recipe.name}</span>
+            </div>
+            <div style={{ fontSize:11, color:C.dim }}>
+              <span style={{ color:C.green, fontWeight:600 }}>{recipe.protein}g P</span>
+              {" · "}{recipe.carbs}g C{" · "}{recipe.fat}g F{" · "}{recipe.time}min
+              {recipe.meal?.length > 0 &&
+                <span style={{ color:C.dimMid }}>{" · "}{recipe.meal.map(m=>mealShort[m]||m).join("/")}</span>}
+            </div>
+            {recipe.ingredients?.length > 0 && (
+              <div style={{ fontSize:11, color:C.dimMid, marginTop:4,
+                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                {recipe.ingredients.slice(0,2).join(" · ")}
+                {recipe.ingredients.length > 2 && ` +${recipe.ingredients.length-2} more`}
+              </div>
+            )}
+          </div>
+          <div style={{ textAlign:"right", marginLeft:12, flexShrink:0 }}>
+            <div style={{ fontSize:20, fontWeight:700, color:C.cyan }}>{recipe.cal}</div>
+            <div style={{ fontSize:9, color:C.dim }}>cal</div>
+            <div style={{ marginTop:5, fontSize:11,
+              color: hov ? C.cyan : C.dim, transition:"color 0.18s" }}>View →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── RECIPES TAB ───────────────────────────────────────────────────────────────
 function RecipesTab() {
-  const [f, setF] = useState({ search:"", meal:"all", cuisine:"all", maxCal:800 });
-  const cuisines = [...new Set(RECIPES.map(r=>r.cuisine))].sort();
+  const [apiKey]        = useLocalStorage("jarvis_api_key", "");
+  const [customRecipes,  setCustomRecipes]  = useLocalStorage("jarvis_custom_recipes", []);
+  const [recipeDetails,  setRecipeDetails]  = useLocalStorage("jarvis_recipe_details", {});
 
-  const filtered = RECIPES.filter(r => {
-    const mS = r.name.toLowerCase().includes(f.search.toLowerCase()) || r.tags.some(t=>t.includes(f.search.toLowerCase()));
-    const mM = f.meal==="all" || r.meal.includes(parseInt(f.meal));
-    const mC = f.cuisine==="all" || r.cuisine===f.cuisine;
+  const [f,           setF]           = useState({ search:"", meal:"all", cuisine:"all", maxCal:2000 });
+  const [selected,    setSelected]    = useState(null);
+  const [uploadPhase, setUploadPhase] = useState("idle"); // idle|loading|preview|done
+  const [uploadMsg,   setUploadMsg]   = useState("");
+  const [previews,    setPreviews]    = useState([]);
+  const fileRef = useRef(null);
+
+  // Merge built-in + custom recipes
+  const allRecipes = [
+    ...RECIPES.map(r => ({
+      ...r, source:"builtin",
+      ingredients:  recipeDetails[r.id]?.ingredients  || [],
+      instructions: recipeDetails[r.id]?.instructions || [],
+      imageUrl:     recipeDetails[r.id]?.imageUrl     || "",
+      imageData:    recipeDetails[r.id]?.imageData    || "",
+    })),
+    ...customRecipes.map(r => ({ ...r, source: r.source || "uploaded" })),
+  ];
+
+  const cuisines = [...new Set(allRecipes.map(r => r.cuisine))].sort();
+  const filtered = allRecipes.filter(r => {
+    const mS = r.name.toLowerCase().includes(f.search.toLowerCase())
+      || r.tags?.some(t => t.includes(f.search.toLowerCase()));
+    const mM = f.meal === "all" || r.meal?.includes(parseInt(f.meal));
+    const mC = f.cuisine === "all" || r.cuisine === f.cuisine;
     return mS && mM && mC && r.cal <= f.maxCal;
   });
 
-  const sel = { background:"rgba(0,212,255,0.05)", border:`1px solid ${C.border}`, borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none" };
+  // ── PDF processing ──
+  const processPDF = async (file) => {
+    if (!apiKey) { setUploadMsg("No API key — add your Anthropic key in Integrations first."); return; }
+    setUploadPhase("loading");
+    setUploadMsg("Loading PDF…");
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      const n   = pdf.numPages;
+      setUploadMsg(`Extracting ${n} page${n !== 1 ? "s" : ""}…`);
+
+      let fullText = "";
+      const thumbs = [];
+
+      for (let p = 1; p <= n; p++) {
+        const page = await pdf.getPage(p);
+        // Text
+        const tc  = await page.getTextContent();
+        fullText += `\n\n=== PAGE ${p} ===\n${tc.items.map(i => i.str).join(" ")}`;
+        // Thumbnail at 150px wide
+        const nativeVp = page.getViewport({ scale:1 });
+        const scale    = 150 / nativeVp.width;
+        const vp       = page.getViewport({ scale });
+        const canvas   = document.createElement("canvas");
+        canvas.width   = Math.round(vp.width);
+        canvas.height  = Math.round(vp.height);
+        await page.render({ canvasContext:canvas.getContext("2d"), viewport:vp }).promise;
+        thumbs.push({ page:p, dataUrl:canvas.toDataURL("image/jpeg", 0.5) });
+      }
+
+      setUploadMsg("Analyzing with Claude…");
+      const res = await fetch("/api/chat", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          system: "Extract recipes from text and return a valid JSON array only. No markdown, no commentary.",
+          messages:[{ role:"user", content:
+            `Extract ALL complete recipes. Return a JSON array where each item has exactly:
+{"name":"string","cal":number,"protein":number,"carbs":number,"fat":number,"time":number,
+ "cuisine":"American|Italian|Mexican|Asian|Mediterranean|Korean|Other",
+ "meal":[1,2,3],"tags":["string"],"ingredients":["string"],"instructions":["string"],"sourcePage":number}
+meal: 1=Breakfast 2=Lunch 3=Dinner 4=Post-workout 5=Dessert. Estimate macros if not listed.
+Return ONLY the JSON array starting with [ and ending with ].
+
+TEXT:
+${fullText.slice(0, 22000)}` }],
+          apiKey, model:"claude-sonnet-4-5", maxTokens:4000,
+        }),
+      });
+
+      const data  = await res.json();
+      const raw   = data.content?.[0]?.text || "[]";
+      const match = raw.match(/\[[\s\S]*\]/);
+      let extracted = [];
+      try { extracted = JSON.parse(match ? match[0] : raw); }
+      catch {
+        setUploadMsg("Couldn't parse recipes from this PDF. Try a clearer PDF.");
+        setUploadPhase("idle"); return;
+      }
+      if (!extracted.length) {
+        setUploadMsg("No recipes found — the PDF may not contain structured recipes.");
+        setUploadPhase("idle"); return;
+      }
+
+      // Attach page thumbnail to each recipe
+      const ts = Date.now();
+      const withThumbs = extracted.map((r, i) => {
+        const pg    = r.sourcePage || Math.min(i+1, thumbs.length);
+        const thumb = thumbs.find(t => t.page === pg) || thumbs[0];
+        return {
+          ...r, id:`custom_${ts}_${i}`, source:"uploaded",
+          imageData: thumb?.dataUrl || "",
+          meal:         Array.isArray(r.meal)         ? r.meal         : [3],
+          tags:         Array.isArray(r.tags)         ? r.tags         : [],
+          ingredients:  Array.isArray(r.ingredients)  ? r.ingredients  : [],
+          instructions: Array.isArray(r.instructions) ? r.instructions : [],
+        };
+      });
+
+      setPreviews(withThumbs);
+      setUploadPhase("preview");
+
+    } catch (e) {
+      setUploadMsg("Error processing PDF: " + e.message);
+      setUploadPhase("idle");
+    }
+  };
+
+  const importRecipes = (list) => {
+    setCustomRecipes(prev => [...prev, ...list]);
+    setPreviews([]);
+    setUploadPhase("done");
+    setUploadMsg(`Imported ${list.length} recipe${list.length !== 1 ? "s" : ""}!`);
+    setTimeout(() => { setUploadPhase("idle"); setUploadMsg(""); }, 4000);
+  };
+
+  const handleSave = (updated) => {
+    if (updated.source === "builtin") {
+      setRecipeDetails(prev => ({
+        ...prev,
+        [updated.id]: {
+          ingredients: updated.ingredients, instructions: updated.instructions,
+          imageUrl: updated.imageUrl, imageData: updated.imageData || "",
+        },
+      }));
+    } else {
+      setCustomRecipes(prev => prev.map(r => r.id === updated.id ? updated : r));
+    }
+    setSelected(updated);
+  };
+
+  const handleDelete = (id) => {
+    setCustomRecipes(prev => prev.filter(r => r.id !== id));
+    setSelected(null);
+  };
+
+  const selStyle = {
+    background:"rgba(0,212,255,0.05)", border:`1px solid ${C.border}`,
+    borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none",
+  };
 
   return (
     <>
-      <HUDCard title={`KRANK Library — ${RECIPES.length} Recipes`}>
+      {selected && (
+        <RecipeDetailModal recipe={selected} onClose={() => setSelected(null)}
+          onSave={handleSave} onDelete={() => handleDelete(selected.id)} />
+      )}
+
+      {/* ── PDF Import ── */}
+      <HUDCard title="Import Recipes from PDF" accent={C.purple}>
+        {uploadPhase === "idle" && (
+          <>
+            <div style={{ fontSize:12, color:C.dim, marginBottom:12, lineHeight:1.6 }}>
+              Upload a recipe book PDF — Claude will extract all recipes including ingredients,
+              instructions, and macros automatically.
+              {!apiKey && <span style={{ color:C.yellow }}> Add your Anthropic key in Integrations first.</span>}
+            </div>
+            <input type="file" accept=".pdf" ref={fileRef} style={{ display:"none" }}
+              onChange={e => { if (e.target.files[0]) processPDF(e.target.files[0]); e.target.value=""; }} />
+            <div
+              onClick={() => apiKey && fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (file?.type === "application/pdf" && apiKey) processPDF(file);
+              }}
+              style={{ border:`2px dashed ${apiKey ? C.purple+"60" : C.dim+"30"}`,
+                borderRadius:10, padding:"28px 20px", textAlign:"center",
+                cursor: apiKey ? "pointer" : "not-allowed",
+                opacity: apiKey ? 1 : 0.55, transition:"border-color 0.2s" }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>📄</div>
+              <div style={{ fontSize:13, color: apiKey ? C.purple : C.dim, fontWeight:600, marginBottom:4 }}>
+                Drop PDF here or tap to browse
+              </div>
+              <div style={{ fontSize:11, color:C.dim }}>
+                Recipe books, guides, meal plans — any PDF with recipes
+              </div>
+            </div>
+          </>
+        )}
+
+        {uploadPhase === "loading" && (
+          <div style={{ textAlign:"center", padding:"24px 0" }}>
+            <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:14 }}>
+              {[0,1,2].map(d => (
+                <div key={d} style={{ width:8, height:8, borderRadius:"50%", background:C.purple,
+                  animation:`jarvis-dot 1.2s ease-in-out ${d*0.2}s infinite` }} />
+              ))}
+            </div>
+            <div style={{ fontSize:13, color:C.purple, fontWeight:600 }}>{uploadMsg}</div>
+          </div>
+        )}
+
+        {uploadPhase === "preview" && (
+          <div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text }}>
+                {previews.length} recipe{previews.length !== 1 ? "s" : ""} found
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <HUDBtn onClick={() => { setPreviews([]); setUploadPhase("idle"); }}>Discard</HUDBtn>
+                <HUDBtn variant="primary" onClick={() => importRecipes(previews)}>Import All</HUDBtn>
+              </div>
+            </div>
+            <div style={{ maxHeight:280, overflowY:"auto", display:"flex", flexDirection:"column",
+              gap:6, scrollbarWidth:"thin", scrollbarColor:`${C.dim} transparent` }}>
+              {previews.map((r, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
+                  background:"rgba(0,16,40,0.6)", border:`1px solid ${C.border}`, borderRadius:8 }}>
+                  {r.imageData && (
+                    <img src={r.imageData} alt="" style={{ width:44, height:48,
+                      objectFit:"cover", borderRadius:5, flexShrink:0 }} />
+                  )}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.name}</div>
+                    <div style={{ fontSize:11, color:C.dim }}>
+                      {r.cal} cal · {r.protein}g P · {r.ingredients?.length||0} ingredients
+                    </div>
+                  </div>
+                  <HUDBtn onClick={() => importRecipes([r])} style={{ padding:"5px 10px", fontSize:10 }}>Add</HUDBtn>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {uploadPhase === "done" && (
+          <div style={{ textAlign:"center", padding:"16px 0" }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>✅</div>
+            <div style={{ fontSize:13, color:C.green, fontWeight:600 }}>{uploadMsg}</div>
+          </div>
+        )}
+      </HUDCard>
+
+      {/* ── Filter ── */}
+      <HUDCard title={`Recipe Library — ${allRecipes.length} Recipes`}>
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <input placeholder="Search recipes or tags..." value={f.search}
-            onChange={e=>setF({...f,search:e.target.value})}
+            onChange={e => setF({...f, search:e.target.value})}
             style={{ width:"100%", background:"rgba(0,212,255,0.04)", border:`1px solid ${C.border}`,
-              borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none", fontFamily:"inherit" }} />
+              borderRadius:4, padding:"9px 12px", color:C.text, fontSize:13, outline:"none",
+              fontFamily:"inherit" }} />
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            <select style={sel} value={f.meal} onChange={e=>setF({...f,meal:e.target.value})}>
+            <select style={selStyle} value={f.meal} onChange={e => setF({...f, meal:e.target.value})}>
               <option value="all">All meals</option>
-              {[1,2,3,4,5].map(n=><option key={n} value={n}>Meal {n}</option>)}
+              {[1,2,3,4,5].map(n => (
+                <option key={n} value={n}>{["","Breakfast","Lunch","Dinner","Post-workout","Dessert"][n]}</option>
+              ))}
             </select>
-            <select style={sel} value={f.cuisine} onChange={e=>setF({...f,cuisine:e.target.value})}>
+            <select style={selStyle} value={f.cuisine} onChange={e => setF({...f, cuisine:e.target.value})}>
               <option value="all">All cuisines</option>
-              {cuisines.map(c=><option key={c} value={c}>{c}</option>)}
+              {cuisines.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:5 }}>
               MAX CALORIES: <span style={{ color:C.cyan }}>{f.maxCal}</span>
             </div>
-            <input type="range" min={100} max={800} step={50} value={f.maxCal}
-              onChange={e=>setF({...f,maxCal:parseInt(e.target.value)})}
+            <input type="range" min={100} max={2000} step={50} value={f.maxCal}
+              onChange={e => setF({...f, maxCal:parseInt(e.target.value)})}
               style={{ width:"100%", accentColor:C.cyan }} />
           </div>
         </div>
       </HUDCard>
 
-      <div style={{ fontSize:11, color:C.dim, letterSpacing:"0.1em", marginBottom:12 }}>
-        {filtered.length} RECIPES SHOWN
+      <div style={{ fontSize:11, color:C.dim, letterSpacing:"0.1em", marginBottom:10 }}>
+        {filtered.length} RECIPES SHOWN — TAP ANY TO VIEW FULL DETAILS
       </div>
 
-      {filtered.map(r => (
-        <div key={r.id} style={{ background:"rgba(0,212,255,0.02)", border:`1px solid ${C.borderDim}`,
-          borderRadius:4, padding:"14px 16px", marginBottom:8 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-            <div style={{ flex:1 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-                <span style={{ fontSize:10, color:C.dim, fontWeight:700 }}>#{r.id}</span>
-                <span style={{ fontSize:14, fontWeight:600, color:C.text }}>{r.name}</span>
-              </div>
-              <div style={{ fontSize:11, color:C.dim, marginBottom:8 }}>
-                <span style={{ color:C.green }}>{r.protein}g P</span> · {r.carbs}g C · {r.fat}g F · {r.time}min · Meal {r.meal.join("/")}
-              </div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                {r.tags.map(t => (
-                  <span key={t} style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
-                    background:"rgba(0,212,255,0.08)", color:C.cyan, border:`1px solid ${C.border}` }}>
-                    {t}
-                  </span>
-                ))}
-                <span style={{ padding:"2px 8px", borderRadius:3, fontSize:10, fontWeight:600,
-                  background:"rgba(139,92,246,0.08)", color:C.purple, border:`1px solid ${C.purple}44` }}>
-                  {r.cuisine}
-                </span>
-              </div>
-            </div>
-            <div style={{ textAlign:"right", marginLeft:16 }}>
-              <div style={{ fontSize:20, fontWeight:700, color:C.cyan }}>{r.cal}</div>
-              <div style={{ fontSize:10, color:C.dim }}>cal</div>
-            </div>
-          </div>
-        </div>
-      ))}
+      {filtered.map(r => <RecipeCard key={r.id} recipe={r} onSelect={setSelected} />)}
     </>
   );
 }
