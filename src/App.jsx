@@ -410,7 +410,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 400, system, messages: [{ role:"user", content:text }] })
       });
       return r.json();
     };
@@ -428,7 +428,7 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
     const sleep = ms => new Promise(res => setTimeout(res, ms));
 
     let data;
-    const maxAttempts = 3;
+    const maxAttempts = 5;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         data = await callProxy();
@@ -436,9 +436,10 @@ AVAILABLE ACTIONS (append to end of response, only when taking an action):
         try { data = await tryDirect(); }
         catch { speak("I can't reach my processing core. Please add your Anthropic API key in Settings."); setThinking(false); return; }
       }
-      if (data?.error?.type === "overloaded_error" || data?.error?.message?.includes("overloaded")) {
-        if (attempt < maxAttempts - 1) { await sleep(1000 * Math.pow(2, attempt)); continue; }
-        speak("My processing core is under heavy load. Try again in a moment."); setThinking(false); return;
+      const isOverloaded = data?.error?.type === "overloaded_error" || data?.error?.message?.toLowerCase().includes("overloaded");
+      if (isOverloaded) {
+        if (attempt < maxAttempts - 1) { await sleep(Math.min(1000 * Math.pow(2, attempt), 8000)); continue; }
+        speak("Still overloaded after several retries. Give it a few seconds and try again."); setThinking(false); return;
       }
       break;
     }
