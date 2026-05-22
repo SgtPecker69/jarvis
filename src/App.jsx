@@ -175,51 +175,74 @@ function useSpotify() {
     }
   };
 
+  // Returns null on success, error string on failure
   const control = async (cmd) => {
-    if (!connected) return;
-    const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    if (!connected) return "Spotify not connected";
+    const auth = { Authorization: `Bearer ${token}` };
+    const json = { ...auth, "Content-Type": "application/json" };
 
-    // Always resolve the best available device so commands work even when paused
+    // Get best available device ID
     const getDeviceId = async () => {
       try {
-        const r = await fetch("https://api.spotify.com/v1/me/player/devices", { headers: h });
+        const r = await fetch("https://api.spotify.com/v1/me/player/devices", { headers: auth });
+        if (!r.ok) return null;
         const d = await r.json();
-        // Prefer the currently active device, fall back to first available
         const active = d.devices?.find(x => x.is_active) || d.devices?.[0];
         return active?.id || null;
       } catch { return null; }
     };
 
+    // PUT play endpoint, with device_id if available
+    const doPlay = async (body) => {
+      const did = await getDeviceId();
+      const url = `https://api.spotify.com/v1/me/player/play${did ? `?device_id=${did}` : ""}`;
+      const r = await fetch(url, { method: "PUT", headers: json, body: body ? JSON.stringify(body) : undefined });
+      if (r.status === 204 || r.status === 200) return null; // success
+      const d = await r.json().catch(() => ({}));
+      return d?.error?.message || `Spotify error ${r.status}`;
+    };
+
     try {
       if (cmd === "pause") {
-        await fetch("https://api.spotify.com/v1/me/player/pause", { method:"PUT", headers:h });
+        const r = await fetch("https://api.spotify.com/v1/me/player/pause", { method:"PUT", headers: auth });
+        if (r.status !== 204 && r.status !== 200) return `Pause failed (${r.status})`;
+
       } else if (cmd === "play") {
-        const did = await getDeviceId();
-        const url = did ? `https://api.spotify.com/v1/me/player/play?device_id=${did}` : "https://api.spotify.com/v1/me/player/play";
-        await fetch(url, { method:"PUT", headers:h });
+        return await doPlay(null);
+
       } else if (cmd === "next") {
-        await fetch("https://api.spotify.com/v1/me/player/next",     { method:"POST", headers:h });
+        const r = await fetch("https://api.spotify.com/v1/me/player/next", { method:"POST", headers: auth });
+        if (r.status !== 204 && r.status !== 200) return `Skip failed (${r.status})`;
+
       } else if (cmd === "prev") {
-        await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers:h });
+        const r = await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers: auth });
+        if (r.status !== 204 && r.status !== 200) return `Prev failed (${r.status})`;
+
       } else if (cmd.startsWith("play:")) {
-        // Clean the query — strip filler phrases the user might say
-        const raw = cmd.slice(5);
-        const q = raw
+        // Clean filler words before searching
+        const q = cmd.slice(5)
           .replace(/\s+on\s+spotify\s*$/i, "")
           .replace(/\s+for\s+me\s*$/i, "")
           .replace(/\s+please\s*$/i, "")
+          .replace(/\s+now\s*$/i, "")
           .trim();
-        // Search tracks only (not playlists) for specific song requests
-        const sr = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`, { headers:h });
+        if (!q) return "No search query";
+
+        const sr = await fetch(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=3`,
+          { headers: auth }
+        );
+        if (!sr.ok) return `Search failed (${sr.status})`;
         const sd = await sr.json();
-        const uri = sd.tracks?.items?.[0]?.uri;
-        if (uri) {
-          const did  = await getDeviceId();
-          const url  = did ? `https://api.spotify.com/v1/me/player/play?device_id=${did}` : "https://api.spotify.com/v1/me/player/play";
-          await fetch(url, { method:"PUT", headers:h, body:JSON.stringify({ uris: [uri] }) });
-        }
+        const track = sd.tracks?.items?.[0];
+        if (!track) return `No track found for: ${q}`;
+
+        return await doPlay({ uris: [track.uri] });
       }
-    } catch {}
+      return null; // success
+    } catch (e) {
+      return e.message;
+    }
   };
 
   const [devices, setDevices] = useState([]);
@@ -2144,9 +2167,11 @@ export default function Jarvis() {
         if (s) applyScene(s);
         break;
       }
-      case "spotify":
-        spotify.control(action.cmd);
+      case "spotify": {
+        const err = await spotify.control(action.cmd);
+        if (err) notify("Spotify: " + err, "error");
         break;
+      }
       case "log_macros":
         setMacros(m => ({
           cal:     m.cal     + (action.cal     || 0),
