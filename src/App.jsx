@@ -516,16 +516,16 @@ function useCrypto() {
 }
 
 // ─── JARVIS AI HOOK ────────────────────────────────────────────────────────────
-// ElevenLabs voice IDs — curated natural female voices
+// ElevenLabs voice IDs — pre-made voices, free tier API compatible
 const ELEVEN_VOICES = [
-  { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica (Australian)"     },
-  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte (British)"      },
-  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily (British)"           },
-  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah (American)"         },
-  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura (American)"         },
-  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda (Warm American)"  },
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel (American)"        },
+  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi (American)"          },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella (American)"         },
+  { id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli (American)"          },
+  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh (American Male)"     },
+  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam (American Male)"     },
 ];
-const DEFAULT_VOICE_ID = "cgSgspJ2msm6clMCkdW9"; // Jessica — Australian female
+const DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel — confirmed free tier
 
 function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, calendar, weather, coffeeOn, webhooks, crypto, onAction }) {
   const [listening,  setListening]  = useState(false);
@@ -564,8 +564,10 @@ function useJarvisAI({ macros, measurements, sleep: sleepData, hue, spotify, cal
     if (elevenKey) {
       // ElevenLabs — human-quality voice
       setSpeaking(true);
+      // If stored voiceId is no longer in our list (e.g. old library voice), reset to default
+      const validVoiceId = ELEVEN_VOICES.find(v => v.id === voiceId) ? voiceId : DEFAULT_VOICE_ID;
       try {
-        const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId || DEFAULT_VOICE_ID}`, {
+        const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${validVoiceId}`, {
           method: "POST",
           headers: { "xi-api-key": elevenKey, "Content-Type": "application/json" },
           body: JSON.stringify({
