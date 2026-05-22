@@ -178,19 +178,39 @@ function useSpotify() {
   const control = async (cmd) => {
     if (!connected) return;
     const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+
+    // Always resolve the best available device so commands work even when paused
+    const getDeviceId = async () => {
+      try {
+        const r = await fetch("https://api.spotify.com/v1/me/player/devices", { headers: h });
+        const d = await r.json();
+        // Prefer the currently active device, fall back to first available
+        const active = d.devices?.find(x => x.is_active) || d.devices?.[0];
+        return active?.id || null;
+      } catch { return null; }
+    };
+
     try {
-      if (cmd === "pause")   await fetch("https://api.spotify.com/v1/me/player/pause",    { method:"PUT",  headers:h });
-      else if (cmd === "play")    await fetch("https://api.spotify.com/v1/me/player/play",     { method:"PUT",  headers:h });
-      else if (cmd === "next")    await fetch("https://api.spotify.com/v1/me/player/next",     { method:"POST", headers:h });
-      else if (cmd === "prev")    await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers:h });
-      else if (cmd.startsWith("play:")) {
-        const q   = cmd.slice(5);
-        const sr  = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track,playlist&limit=1`, { headers:h });
-        const sd  = await sr.json();
-        const uri = sd.playlists?.items?.[0]?.uri || sd.tracks?.items?.[0]?.uri;
+      if (cmd === "pause") {
+        await fetch("https://api.spotify.com/v1/me/player/pause", { method:"PUT", headers:h });
+      } else if (cmd === "play") {
+        const did = await getDeviceId();
+        const url = did ? `https://api.spotify.com/v1/me/player/play?device_id=${did}` : "https://api.spotify.com/v1/me/player/play";
+        await fetch(url, { method:"PUT", headers:h });
+      } else if (cmd === "next") {
+        await fetch("https://api.spotify.com/v1/me/player/next",     { method:"POST", headers:h });
+      } else if (cmd === "prev") {
+        await fetch("https://api.spotify.com/v1/me/player/previous", { method:"POST", headers:h });
+      } else if (cmd.startsWith("play:")) {
+        const q  = cmd.slice(5);
+        // Search tracks only (not playlists) for specific song requests
+        const sr = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`, { headers:h });
+        const sd = await sr.json();
+        const uri = sd.tracks?.items?.[0]?.uri;
         if (uri) {
-          const body = uri.includes("playlist") ? { context_uri: uri } : { uris: [uri] };
-          await fetch("https://api.spotify.com/v1/me/player/play", { method:"PUT", headers:h, body:JSON.stringify(body) });
+          const did  = await getDeviceId();
+          const url  = did ? `https://api.spotify.com/v1/me/player/play?device_id=${did}` : "https://api.spotify.com/v1/me/player/play";
+          await fetch(url, { method:"PUT", headers:h, body:JSON.stringify({ uris: [uri] }) });
         }
       }
     } catch {}
