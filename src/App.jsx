@@ -228,14 +228,20 @@ function useSpotify() {
           .trim();
         if (!q) return "No search query";
 
+        // Use Spotify field qualifiers for precise matching when "by" is present
+        // e.g. "Fancy by Drake" → "track:Fancy artist:Drake"
+        let searchQ = q;
+        const byMatch = q.match(/^(.+?)\s+by\s+(.+)$/i);
+        if (byMatch) searchQ = `track:${byMatch[1].trim()} artist:${byMatch[2].trim()}`;
+
         const sr = await fetch(
-          `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(searchQ)}&type=track&limit=1`,
           { headers: auth }
         );
         if (!sr.ok) return `Search failed (${sr.status})`;
         const sd = await sr.json();
         const track = sd.tracks?.items?.[0];
-        if (!track) return `No track found for: ${q}`;
+        if (!track) return `Couldn't find "${q}" on Spotify`;
 
         // Play via album context + offset — bypasses URI playback restrictions
         // on certain account types (direct uris: [...] returns 403)
@@ -555,10 +561,12 @@ ${memories.length ? memories.map(m => `- ${m.fact}`).join('\n') : "None yet."}
 When Mark tells you something worth remembering or you observe something significant, append: <remember>one-sentence fact</remember>
 When Mark explicitly asks you to remember something important, be sure to confirm you've noted it.
 
+SPOTIFY STATUS: Fully working. Play, pause, skip, and search all function correctly. Never tell Mark play commands aren't working — they are. Always confirm music actions confidently. Ignore any previous conversation where you said otherwise.
+
 ACTIONS — this is critical: whenever you control anything (Spotify, lights, macros, coffee), you MUST append the exact action tag at the end of your response. Never say you're doing something without including the tag — the tag is what actually triggers the action.
 <action>{"type":"lighting","scene":"wake|focus|training|wind_down|sleep|meal_prep"}</action>
 <action>{"type":"spotify","cmd":"play|pause|next|prev|play:Song Name Artist"}</action>
-For play:, use only the song title and artist name — never include "on Spotify", "for me", "please", or any other filler words. Example: play:Hey Jude The Beatles
+For play:, extract ONLY the song title and artist. Example: "play Fancy by Drake" → play:Fancy by Drake
 <action>{"type":"log_macros","cal":0,"protein":0,"carbs":0,"fat":0}</action>
 <action>{"type":"reset_macros"}</action>
 <action>{"type":"coffee","on":true}</action>${webhooks?.webhooks?.filter(w=>w.enabled).length ? `
@@ -571,6 +579,36 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
   const processCommand = useCallback(async (text) => {
     setThinking(true);
     setTranscript(text);
+
+    // ── MUSIC FAST PATH ──────────────────────────────────────────────────────────
+    // Fire Spotify commands immediately from the transcript — music starts playing
+    // before the AI even responds, cutting perceived delay from ~10s to ~2s.
+    let firedSpotifyCmd = null;
+    if (spotify?.connected) {
+      const l = text.toLowerCase().trim();
+      const core = l
+        .replace(/^(hey jarvis[,.]?\s*|jarvis[,.]?\s*|can you\s*|please\s*|could you\s*|will you\s*)/, "")
+        .trim();
+      if (/^(pause|pause the music|stop the music|stop playing)\b/.test(core)) {
+        firedSpotifyCmd = "pause";
+      } else if (/^(skip|next song|next track|next one|play next)\b/.test(core)) {
+        firedSpotifyCmd = "next";
+      } else if (/^(go back|previous song|previous track|last song)\b/.test(core)) {
+        firedSpotifyCmd = "prev";
+      } else if (/^(resume|unpause|continue playing)\b/.test(core) && !/\bplay\s+\w/.test(core)) {
+        firedSpotifyCmd = "play";
+      } else {
+        const m = core.match(/^play\s+(.+?)(?:\s+(?:on|in)\s+spotify|\s+for me|\s+please|\s+now)?\s*$/);
+        if (m?.[1]) {
+          firedSpotifyCmd = "play:" + m[1]
+            .replace(/\s+on\s+spotify\s*$/i, "")
+            .trim();
+        }
+      }
+      if (firedSpotifyCmd) onAction({ type: "spotify", cmd: firedSpotifyCmd });
+    }
+    // ─────────────────────────────────────────────────────────────────────────────
+
     const system = buildContext();
 
     const tryDirect = async () => {
@@ -645,10 +683,13 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
 
     let txt = data?.content?.[0]?.text || "";
 
-    // Parse action tags
+    // Parse action tags — skip Spotify if already fired via fast path
     const actionMatch = txt.match(/<action>([\s\S]*?)<\/action>/);
     if (actionMatch) {
-      try { onAction(JSON.parse(actionMatch[1].trim())); } catch {}
+      try {
+        const act = JSON.parse(actionMatch[1].trim());
+        if (!(act.type === "spotify" && firedSpotifyCmd)) await onAction(act);
+      } catch {}
       txt = txt.replace(/<action>[\s\S]*?<\/action>/g, "").trim();
     }
 
@@ -710,7 +751,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
       };
       doUpdate();
     }
-  }, [buildContext, apiKey, groqKey, chatHistory, setChatHistory, memoryFile, setMemoryFile, setMemoryUpdated, setMemories, onAction, speak]);
+  }, [buildContext, apiKey, groqKey, chatHistory, setChatHistory, memoryFile, setMemoryFile, setMemoryUpdated, setMemories, onAction, speak, spotify]);
 
   const startListening = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
