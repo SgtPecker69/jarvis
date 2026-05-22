@@ -718,7 +718,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
           "content-type": "application/json",
           "anthropic-dangerous-direct-browser-access": "true",
         },
-        body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 600, system, messages: [...recentHistory, { role:"user", content:text }] })
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system, messages: [...recentHistory, { role:"user", content:text }] })
       });
       return r.json();
     };
@@ -841,7 +841,7 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
             const r = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
               headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true" },
-              body: JSON.stringify({ model: "claude-3-5-haiku-20241022", max_tokens: 600, system: "You maintain JARVIS's memory file about Mark. Return only the updated profile text.", messages: [{ role: "user", content: memPrompt }] })
+              body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 600, system: "You maintain JARVIS's memory file about Mark. Return only the updated profile text.", messages: [{ role: "user", content: memPrompt }] })
             });
             const d = await r.json();
             result = d?.content?.[0]?.text;
@@ -2277,7 +2277,7 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
       <HUDCard>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
           {[
-            ["AI Model",    "Claude Haiku 3.5"],
+            ["AI Model",    "Claude Haiku 4.5"],
             ["AI Fallback", jarvis.groqKey ? "Groq Llama ●" : "None ○"],
             ["Voice STT",   "Web Speech API"],
             ["Voice TTS",   jarvis.elevenKey ? "ElevenLabs ●" : "Browser TTS ○"],
