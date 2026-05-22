@@ -229,7 +229,7 @@ function useSpotify() {
         if (!q) return "No search query";
 
         const sr = await fetch(
-          `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=3`,
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(q)}&type=track&limit=1`,
           { headers: auth }
         );
         if (!sr.ok) return `Search failed (${sr.status})`;
@@ -237,7 +237,15 @@ function useSpotify() {
         const track = sd.tracks?.items?.[0];
         if (!track) return `No track found for: ${q}`;
 
-        return await doPlay({ uris: [track.uri] });
+        // Play via album context + offset — bypasses URI playback restrictions
+        // on certain account types (direct uris: [...] returns 403)
+        const err = await doPlay({
+          context_uri: track.album.uri,
+          offset: { uri: track.uri },
+        });
+        // Fallback: try direct URI play if context approach fails
+        if (err) return await doPlay({ uris: [track.uri] });
+        return null;
       }
       return null; // success
     } catch (e) {
