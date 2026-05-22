@@ -1271,14 +1271,18 @@ function NowPlaying({ spotify }) {
 }
 
 // ─── JARVIS AI TAB ─────────────────────────────────────────────────────────────
-function JarvisAITab({ macros, measurements, oura, hue, sleep, coffeeOn }) {
+function JarvisAITab({ macros, measurements, oura, hue, sleep, coffeeOn, jarvis }) {
   const [apiKey]            = useLocalStorage("jarvis_api_key", "");
   const [messages, setMessages] = useState([
     { role:"assistant", content:"JARVIS online. What do you need?" }
   ]);
-  const [input,   setInput]   = useState("");
-  const [loading, setLoading] = useState(false);
-  const endRef = useRef(null);
+  const [input,     setInput]     = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [listening, setListening] = useState(false);
+  const [liveText,  setLiveText]  = useState(""); // interim speech transcript
+  const endRef   = useRef(null);
+  const recogRef = useRef(null);
+  const sendRef  = useRef(null); // always-current send fn (avoids stale closure in mic handler)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior:"smooth" });
@@ -1357,6 +1361,7 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
     const msg = text.trim();
     if (!msg || loading) return;
     setInput("");
+    setLiveText("");
     const newMessages = [...messages, { role:"user", content:msg }];
     setMessages(newMessages);
     setLoading(true);
@@ -1377,11 +1382,56 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
         || data.error?.message
         || "Something went wrong. Check your API key in Integrations.";
       setMessages(prev => [...prev, { role:"assistant", content:reply }]);
+      // Speak the reply via ElevenLabs / browser TTS
+      jarvis?.speak?.(reply);
     } catch {
       setMessages(prev => [...prev, { role:"assistant", content:"Network error — check your connection." }]);
     }
     setLoading(false);
-  }, [messages, loading, apiKey, buildSystemPrompt]);
+  }, [messages, loading, apiKey, buildSystemPrompt, jarvis]);
+
+  // Keep sendRef current so the mic handler always calls the latest send closure
+  sendRef.current = send;
+
+  const startMic = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert("Speech recognition not supported — use Chrome or Safari");
+      return;
+    }
+    const recog = new SR();
+    recog.continuous     = false;
+    recog.interimResults = true;
+    recog.lang           = "en-US";
+
+    recog.onstart  = () => { setListening(true); setLiveText(""); };
+    recog.onend    = () => { setListening(false); setLiveText(""); };
+    recog.onerror  = () => { setListening(false); setLiveText(""); };
+
+    recog.onresult = (e) => {
+      let interim = "", final = "";
+      for (const r of e.results) {
+        if (r.isFinal) final += r[0].transcript;
+        else           interim += r[0].transcript;
+      }
+      setLiveText(interim || final);
+      if (final.trim()) {
+        setLiveText("");
+        recog.stop();
+        // Use sendRef so we never capture a stale closure
+        setTimeout(() => sendRef.current?.(final.trim()), 50);
+      }
+    };
+
+    recogRef.current = recog;
+    recog.start();
+  }, []); // no deps — relies on sendRef
+
+  const stopMic = useCallback(() => {
+    recogRef.current?.stop();
+    setListening(false);
+    setLiveText("");
+  }, []);
 
   const QUICK = [
     "How am I doing today?",
@@ -1468,20 +1518,56 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
           ))}
         </div>
 
+        {/* Listening indicator */}
+        {listening && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8,
+            padding:"7px 12px", borderRadius:8,
+            background:"rgba(255,18,68,0.07)", border:`1px solid ${C.red}33` }}>
+            <div style={{ width:7, height:7, borderRadius:"50%", background:C.red,
+              boxShadow:`0 0 8px ${C.red}`, animation:"ambient-pulse 0.8s ease-in-out infinite" }} />
+            <span style={{ fontSize:12, color:C.red, fontWeight:600, flex:1 }}>
+              {liveText || "Listening…"}
+            </span>
+            <button onClick={stopMic} style={{ background:"none", border:"none", color:C.red,
+              cursor:"pointer", fontSize:11, fontWeight:600, padding:0 }}>Cancel</button>
+          </div>
+        )}
+
         {/* Input row */}
-        <div style={{ display:"flex", gap:8, alignItems:"flex-end" }}>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          {/* Mic button */}
+          <button
+            onClick={listening ? stopMic : startMic}
+            disabled={loading || !apiKey}
+            title={listening ? "Stop listening" : "Speak to JARVIS"}
+            style={{
+              width:40, height:40, borderRadius:"50%", flexShrink:0,
+              background: listening
+                ? `rgba(255,18,68,0.18)`
+                : `rgba(136,85,255,0.1)`,
+              border:`1px solid ${listening ? C.red+"88" : C.purple+"44"}`,
+              color: listening ? C.red : C.purple,
+              cursor: loading || !apiKey ? "not-allowed" : "pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:17, opacity: loading || !apiKey ? 0.4 : 1,
+              transition:"all 0.2s",
+              animation: listening ? "ambient-pulse 0.9s ease-in-out infinite" : "none",
+            }}>
+            {listening ? "⏹" : "🎙️"}
+          </button>
+
           <div style={{ flex:1 }}>
             <HUDInput
-              placeholder={apiKey ? "Ask JARVIS anything…" : "Add API key in Integrations to chat"}
+              placeholder={listening ? "Speak now…" : apiKey ? "Ask JARVIS anything…" : "Add API key in Integrations to chat"}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
-              disabled={loading || !apiKey}
+              disabled={loading || !apiKey || listening}
               style={{ marginBottom:0 }}
             />
           </div>
           <HUDBtn variant="primary" onClick={() => send(input)}
-            disabled={loading || !input.trim() || !apiKey}
+            disabled={loading || !input.trim() || !apiKey || listening}
             style={{ flexShrink:0, marginBottom:0 }}>Send</HUDBtn>
         </div>
       </HUDCard>
@@ -2994,7 +3080,7 @@ export default function Jarvis() {
 
       {/* Content */}
       <div style={{ padding:"24px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
-        {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} />}
+        {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
         {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
