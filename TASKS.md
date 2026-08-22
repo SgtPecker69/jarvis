@@ -13,11 +13,8 @@ Nothing has been committed since 2026-05-22.
 
 - [x] 2026-08-22 — `.gitignore` written (`node_modules/`, `dist/`, `.env*`, `data/`, `*.db*`,
       logs, `.claude/settings.local.json`, `.DS_Store`). Still untracked.
-- [ ] `cd ~/jarvis && git add -A && git commit -m "checkpoint: pre-rebuild state" && git push origin main`
-
-      This covers 870 new lines in `App.jsx` **and `server.js` and `public/`, which have never been
-      committed at all.** The brief calls `server.js` the template for the entire rebuild, and it
-      currently exists in exactly one place on earth.
+- [x] 2026-08-22 — Committed as `38a84f6` and pushed to origin/main. 14 files, 3,943 lines.
+      `server.js`, `public/manifest.json` and `.gitignore` tracked for the first time.
 
 ## Task 1: the key leak — CLOSED 2026-08-22
 
@@ -43,18 +40,22 @@ profile with location and habits) from 2026-05-22 until today. Closed and verifi
 - [ ] Retire `api/config.js` entirely once local-first lands. Secrets move to a local `.env` read
       only by the server; add `.env.example` with names and no values.
 
-## Next — Task 2: the SQLite data layer
+## Task 2: the SQLite data layer — DONE 2026-08-22
 
-`data/jarvis.db`. This is the schema decision point — get it right before anything writes to it.
+`data/jarvis.db` exists. Created with `npm run db:init`.
 
-- [ ] Time-series table: `source`, `metric`, `value`, `timestamp`. **`source` is mandatory on every
-      row** — Oura, Whoop and Apple Watch all write sleep and HR and will disagree nightly.
-- [ ] Events, devices, and import-tracking tables (import tracking is what makes collectors
-      idempotent).
-- [ ] **Targets / commitments table.** Adherence is the north star, and nothing currently records
-      what you *intended* to do — only what happened. Without this, task 11 has nothing to score.
-      Needs: what the target is, the metric it maps to, the period it covers, whether it's active.
-- [ ] Decide and write down the retention story: raw rows forever, or roll up past a certain age?
+- [x] `metrics` — source, metric, value, unit, ts. `UNIQUE(source, metric, ts)` makes collectors
+      idempotent: re-running overwrites instead of duplicating.
+- [x] `events` — calendar, workouts, transactions, plans. `UNIQUE(source, external_id)`.
+- [x] `targets` — the intent model. Without it, adherence can't be scored.
+- [x] `devices`, `imports` — `imports.file_hash` is UNIQUE, so re-dropping a file is a no-op.
+- [x] `db/index.js` — shared connection plus `putMetric`, `latestMetric`, `latestBySource`.
+- [ ] Retention: raw rows forever, or roll up past a certain age? Deferred until there's enough
+      data for it to matter.
+
+**Note for future sessions:** the Cowork device shell is a Linux VM, so `better-sqlite3` (a macOS
+native binary here) won't load there, and SQLite can't open files on the `$HOME/mnt` share at all.
+Anything touching the database has to run in Mark's own Terminal.
 
 ## Next — Task 3: migrate localStorage into SQLite
 

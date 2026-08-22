@@ -72,18 +72,20 @@ Remote: `git@github.com:SgtPecker69/jarvis.git`
 
 <!-- Update this before ending a session. It's what a fresh session reads first. -->
 
-**As of 2026-08-22:** Rebuild planned but not started — no code has changed yet. The app works and
-is deployed: Oura, Google Calendar, Spotify, Hue, weather, crypto, webhooks, ElevenLabs, Claude and
-Groq, recipe library with PDF import, iMessage plan scanning. All of it over `localStorage`.
+**As of 2026-08-22:** Foundation started. Tasks 0, 1 and 2 are done.
 
-Two blockers, both unresolved:
+- Everything committed and pushed (`38a84f6`) — including `server.js`, which had never been tracked.
+- Key leak closed: keys rotated, `GITHUB_PAT`/`GITHUB_GIST_ID` deleted from Vercel, site
+  redeployed, `/api/config` verified returning `not-configured`.
+- `data/jarvis.db` created with five tables: metrics, events, targets, devices, imports.
+  `npm run db:init` builds it. Helpers in `db/index.js`.
 
-1. **Nothing committed since 2026-05-22.** 870 new lines in `App.jsx`; `server.js` and `public/`
-   have never been committed at all. A `.gitignore` exists but is still untracked.
-2. **Key leak — CLOSED 2026-08-22.** `/api/config` on the Vercel deploy served keys publicly from
-   2026-05-22. Keys rotated; `GITHUB_PAT` and `GITHUB_GIST_ID` deleted from Vercel and the site
-   redeployed. Endpoint now returns `not-configured` — verified. The Gist itself was **secret**,
-   never public, so the deploy was the only exposure path. Remaining: the auto-push in
-   `src/App.jsx:129` is still in the code (harmless now, but remove it in Task 1).
+The app itself is unchanged and still runs entirely on `localStorage` — nothing reads the new
+database yet.
 
-**Next up:** `git add -A && git commit && git push` (Task 0).
+**Next up:** Task 3 — migrate the ~30 `jarvis_*` localStorage keys into SQLite. Export from the
+browser first, verify row counts, delete nothing until it's confirmed.
+
+**Gotcha:** the Cowork device shell is a Linux VM. `better-sqlite3` here is a macOS binary and
+won't load, and SQLite cannot open files on the `$HOME/mnt` share. Database commands must run in
+Mark's own Terminal.
