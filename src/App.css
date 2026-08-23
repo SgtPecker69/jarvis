@@ -1,5 +1,5 @@
-/* JARVIS — ground, materials and motion.
-   Palette and scale live in src/styles/tokens.js, mirrored onto :root at boot. */
+/* JARVIS — Mark 42.
+   The view from inside the helmet. Palette in src/styles/tokens.js. */
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -12,24 +12,36 @@ html, body { background: var(--c-bg-deep); }
 body {
   margin: 0;
   color: var(--c-text);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
-               system-ui, sans-serif;
+  font-family: "Archivo", system-ui, sans-serif;
   font-size: 15px;
-  line-height: 1.5;
-  letter-spacing: -0.011em;
+  font-weight: 350;
+  line-height: 1.6;
+  letter-spacing: -0.006em;
 }
 
-.data-num, .tabular {
+/* Readouts are monospaced so digits sit on a fixed grid — a figure that
+   reflows as it changes reads as prose, not instrumentation. */
+.data-num, .tabular, .hud-num {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  font-weight: 300;
+  letter-spacing: -0.02em;
 }
 
-::selection { background: rgba(61, 220, 255, 0.26); color: #fff; }
+.hud-label {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
 
-::-webkit-scrollbar { width: 7px; height: 7px; }
+::selection { background: rgba(201, 162, 39, 0.3); color: #fff; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb { background: var(--c-line); }
+::-webkit-scrollbar-thumb:hover { background: var(--c-line-hot); }
 
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -38,377 +50,248 @@ input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
 
-/* ── the ground ───────────────────────────────────────────────────────────── */
-/* Three slow-drifting colour fields behind everything. This replaces the flat
-   black + grid: the page has a light source, so glass has something to pick up
-   and the surfaces stop reading as grey rectangles. */
+/* ── the visor ────────────────────────────────────────────────────────────── */
 
-.aurora {
-  position: fixed;
-  inset: -30%;
-  z-index: 0;
-  pointer-events: none;
-  filter: blur(76px) saturate(145%);
-  opacity: 0.85;
+.hud-bracket { animation: none; }
+.hud-bracket.boot > svg { animation: bracket-lock 700ms var(--motion-lock) both; }
+.hud-bracket.boot > svg:nth-child(2) { animation-delay: 90ms; }
+.hud-bracket.boot > svg:nth-child(3) { animation-delay: 150ms; }
+.hud-bracket.boot > svg:nth-child(4) { animation-delay: 220ms; }
+
+@keyframes bracket-lock {
+  from { opacity: 0; transform: scale(var(--sx, 1), var(--sy, 1)) translate3d(0, 0, 0); filter: blur(2px); }
+  to   { opacity: 1; filter: none; }
 }
 
-.aurora span {
+/* One slow pass of light across the visor. Long interval — an ambient effect
+   that repeats quickly becomes a strobe you can't stop noticing. */
+.hud-visor-sweep {
   position: absolute;
-  display: block;
-  border-radius: 50%;
-  mix-blend-mode: screen;
-}
-
-.aurora .a1 {
-  width: 52vw; height: 52vw; top: -6%; left: 4%;
-  background: radial-gradient(circle, rgba(61,220,255,0.42), transparent 68%);
-  animation: drift-a 26s ease-in-out infinite;
-}
-.aurora .a2 {
-  width: 46vw; height: 46vw; top: 8%; right: 2%;
-  background: radial-gradient(circle, rgba(124,92,255,0.44), transparent 68%);
-  animation: drift-b 32s ease-in-out infinite;
-}
-.aurora .a3 {
-  width: 40vw; height: 40vw; bottom: -4%; left: 26%;
-  background: radial-gradient(circle, rgba(75,123,255,0.34), transparent 70%);
-  animation: drift-c 38s ease-in-out infinite;
-}
-
-@keyframes drift-a {
-  0%, 100% { transform: translate3d(0,0,0)        scale(1);    }
-  50%      { transform: translate3d(7vw, 5vh, 0)  scale(1.14); }
-}
-@keyframes drift-b {
-  0%, 100% { transform: translate3d(0,0,0)         scale(1.08); }
-  50%      { transform: translate3d(-6vw, 7vh, 0)  scale(0.94); }
-}
-@keyframes drift-c {
-  0%, 100% { transform: translate3d(0,0,0)         scale(1);    }
-  50%      { transform: translate3d(5vw, -6vh, 0)  scale(1.16); }
-}
-
-/* Fine grain over the top. Pure gradients band on real displays and read as
-   synthetic; noise is what makes them look like light. */
-.grain {
-  position: fixed;
   inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.15;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background: linear-gradient(100deg,
+    transparent 42%, rgba(201,162,39,0.05) 49%, rgba(240,198,75,0.09) 51%,
+    rgba(201,162,39,0.05) 53%, transparent 60%);
+  animation: visor-sweep 13s ease-in-out infinite;
+}
+@keyframes visor-sweep {
+  0%, 72%  { transform: translateX(-120%); opacity: 0; }
+  76%      { opacity: 1; }
+  100%     { transform: translateX(120%); opacity: 0; }
 }
 
-/* ── tiles ────────────────────────────────────────────────────────────────── */
+/* ── power-on ─────────────────────────────────────────────────────────────── */
 
-.tile {
-  backdrop-filter: blur(34px) saturate(165%);
-  -webkit-backdrop-filter: blur(34px) saturate(165%);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.055),
-    0 14px 40px rgba(0,0,0,0.42);
-  transition: transform var(--motion-base) var(--motion-ease),
-              border-color var(--motion-base) var(--motion-ease),
-              box-shadow var(--motion-base) var(--motion-ease);
+.hud-boot { animation: boot-out 420ms var(--motion-ease) 1180ms both; }
+@keyframes boot-out { to { opacity: 0; visibility: hidden; } }
+
+.hud-boot-line { animation: boot-line 200ms steps(3) both; }
+@keyframes boot-line { from { opacity: 0; } to { opacity: 1; } }
+
+/* Content arrives after the frame has locked. */
+.hud-content { animation: content-in 620ms var(--motion-ease) both; }
+@keyframes content-in {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: none; }
 }
 
-.tile-interactive { cursor: pointer; }
-.tile-interactive:hover {
-  transform: translateY(-3px);
-  border-color: var(--c-border-hi);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.09),
-    0 22px 56px rgba(0,0,0,0.5);
+/* ── rules and plates ─────────────────────────────────────────────────────── */
+/* No cards. A "panel" is a hairline rule and the space under it — the previous
+   builds boxed everything, and boxes are what made it read as a web page. */
+
+.plate {
+  position: relative;
+  padding: 18px 0 20px;
+  border-top: 1px solid var(--c-line);
 }
-.tile-interactive:active { transform: translateY(-1px) scale(0.995); }
+.plate::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 0;
+  width: 26px; height: 1px;
+  background: var(--c-gold);
+}
 
-.row-interactive { transition: background var(--motion-fast) var(--motion-ease); }
-.row-interactive:hover { background: rgba(255,255,255,0.035); }
+.rule { height: 1px; background: var(--c-line); border: 0; margin: 0; }
 
-/* ── legacy card ──────────────────────────────────────────────────────────── */
-/* Views not yet on the bento still render HUDCard. Same material, so they don't
-   look like a different app while they wait their turn. */
+/* ── controls ─────────────────────────────────────────────────────────────── */
+
+.hud-btn {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  padding: 11px 20px;
+  border-radius: 0;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--c-line-hot);
+  color: var(--c-text);
+  transition: color var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease),
+              background var(--motion-fast) var(--motion-ease);
+}
+.hud-btn:hover:not(:disabled) {
+  color: var(--c-gold-bright);
+  border-color: var(--c-gold);
+  background: rgba(201,162,39,0.06);
+}
+.hud-btn:active:not(:disabled) { background: rgba(201,162,39,0.13); }
+.hud-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.hud-btn:focus-visible { outline: none; border-color: var(--c-gold-bright); box-shadow: 0 0 0 1px var(--c-gold); }
+
+.hud-input {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--c-line) !important;
+  border-radius: 0 !important;
+  color: var(--c-text-bright);
+  transition: border-color var(--motion-fast) var(--motion-ease);
+}
+.hud-input::placeholder {
+  color: var(--c-dim);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.hud-input:focus { border-bottom-color: var(--c-gold) !important; box-shadow: none !important; }
+
+.hud-caret { width: 7px; height: 14px; display: block; animation: caret 1.1s steps(1) infinite; }
+@keyframes caret { 0%, 55% { opacity: 0.85; } 56%, 100% { opacity: 0; } }
+
+/* ── the rail ─────────────────────────────────────────────────────────────── */
+/* Navigation belongs at the edge of vision, not floating in the middle of it.
+   A vertical rail on the left, flush to the frame. */
+
+.rail {
+  position: fixed;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  z-index: 420;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 0;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  height: 30px;
+  padding: 0 16px 0 30px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--c-dim);
+  white-space: nowrap;
+  transition: color var(--motion-base) var(--motion-ease),
+              padding var(--motion-base) var(--motion-lock);
+}
+
+.rail-item::before {
+  content: "";
+  position: absolute;
+  left: 20px;
+  width: 4px; height: 1px;
+  background: currentColor;
+  transition: width var(--motion-base) var(--motion-lock);
+}
+
+.rail-item:hover { color: var(--c-text); padding-left: 34px; }
+.rail-item:hover::before { width: 8px; }
+
+.rail-item.active { color: var(--c-gold-bright); padding-left: 38px; }
+.rail-item.active::before { width: 14px; background: var(--c-gold); }
+
+@media (max-width: 860px) {
+  /* On a phone the rail becomes a strip along the bottom edge of vision. */
+  .rail {
+    left: 0; right: 0; top: auto; bottom: 0;
+    transform: none;
+    flex-direction: row;
+    max-height: none;
+    overflow-x: auto;
+    padding: 10px 22px 16px;
+    gap: 2px;
+    z-index: 420;
+    background: linear-gradient(0deg, var(--c-bg-deep) 55%, transparent);
+  }
+  .rail-item { padding: 0 13px; height: 34px; }
+  .rail-item::before { display: none; }
+  .rail-item.active, .rail-item:hover { padding: 0 13px; }
+  .rail-item.active { border-bottom: 1px solid var(--c-gold); }
+}
+
+/* ── legacy views ─────────────────────────────────────────────────────────── */
+/* Views not yet rebuilt still render HUDCard. Stripped to a plate so they read
+   as part of the same instrument while they wait their turn. */
 
 .hud-card {
   position: relative;
-  border-radius: var(--r-lg);
-  background: linear-gradient(160deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 60%);
-  backdrop-filter: blur(34px) saturate(165%);
-  -webkit-backdrop-filter: blur(34px) saturate(165%);
-  border: 1px solid var(--c-border);
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.055),
-    0 14px 40px rgba(0,0,0,0.42);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--c-line);
+  border-radius: 0;
+  box-shadow: none;
 }
-
-/* ── buttons ──────────────────────────────────────────────────────────────── */
-
-.hud-btn {
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 550;
-  letter-spacing: -0.012em;
-  border-radius: var(--r-pill);
-  padding: 11px 20px;
-  cursor: pointer;
-  position: relative;
-  transition: transform var(--motion-fast) var(--motion-spring),
-              filter var(--motion-fast) var(--motion-ease),
-              box-shadow var(--motion-fast) var(--motion-ease);
-}
-
-.hud-btn:hover:not(:disabled)  { filter: brightness(1.12); }
-.hud-btn:active:not(:disabled) { transform: scale(0.965); }
-.hud-btn:disabled              { cursor: not-allowed; opacity: 0.42; }
-.hud-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 4px rgba(61, 220, 255, 0.65);
-}
-
-/* ── inputs ───────────────────────────────────────────────────────────────── */
-
-.hud-input {
-  transition: border-color var(--motion-fast) var(--motion-ease),
-              background var(--motion-fast) var(--motion-ease),
-              box-shadow var(--motion-fast) var(--motion-ease);
-}
-.hud-input::placeholder { color: var(--c-dim); }
-.hud-input:focus {
-  border-color: rgba(61, 220, 255, 0.5) !important;
-  background: rgba(61, 220, 255, 0.05) !important;
-  box-shadow: 0 0 0 3px rgba(61, 220, 255, 0.09);
-}
-
-/* ── floating dock ────────────────────────────────────────────────────────── */
-/* A dock, not a tab strip. It floats above the content and stays put, which is
-   most of what makes something feel like an app instead of a scrolling page. */
-
-.dock {
-  position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 200;
-  padding: 6px;
-  max-width: min(700px, calc(100vw - 24px));
-  overflow-x: auto;
-  /* Chamfered like every other frame — a rounded pill was the one piece still
-     speaking the old language. */
-  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
-  background: rgba(8, 14, 22, 0.82);
-  backdrop-filter: blur(30px) saturate(170%);
-  -webkit-backdrop-filter: blur(30px) saturate(170%);
-  border: 1px solid rgba(61, 220, 255, 0.22);
-  box-shadow: 0 18px 50px rgba(0,0,0,0.6);
-}
-
-.dock-item {
-  position: relative;
-  z-index: 1;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  height: 38px;
-  padding: 0 14px;
-  border: none;
-  background: none;
-  cursor: pointer;
-  font-family: "Chakra Petch", system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--c-dim-mid);
-  white-space: nowrap;
-  transition: color var(--motion-base) var(--motion-ease);
-}
-
-.dock-item:hover  { color: var(--c-text); }
-.dock-item.active { color: var(--c-cyan-bright); font-weight: 600; }
-
-/* The track scrolls; the pill lives inside it so it travels with the items
-   instead of hovering over a scrolled strip. */
-.dock-track {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.dock-pill {
+.hud-card::before {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 38px;
-  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
-  background: linear-gradient(135deg, rgba(61,220,255,0.26), rgba(61,220,255,0.08));
-  border: 1px solid rgba(61,220,255,0.5);
-  box-shadow: 0 0 20px rgba(61,220,255,0.2);
-  transition: transform 460ms var(--motion-spring), width 460ms var(--motion-spring);
-  pointer-events: none;
-  z-index: 0;
+  top: -1px; left: 0;
+  width: 26px; height: 1px;
+  background: var(--c-gold);
 }
 
-/* ── chips ────────────────────────────────────────────────────────────────── */
+/* ── misc ─────────────────────────────────────────────────────────────────── */
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 13px;
-  border-radius: var(--r-pill);
-  font-size: 12.5px;
-  font-weight: 520;
-  letter-spacing: -0.008em;
-  white-space: nowrap;
-}
-
-/* ── entrance ─────────────────────────────────────────────────────────────── */
-
-@keyframes rise {
-  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.985); }
-  to   { opacity: 1; transform: none; }
-}
+@keyframes rise { from { opacity: 0; transform: translate3d(0,10px,0); } to { opacity: 1; transform: none; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
 .rise { animation: rise var(--motion-base) var(--motion-ease) both; }
-
-/* Tiles arrive in sequence. Short delays — they should feel placed, not
-   watched. */
-.view-enter > * { animation: rise 420ms var(--motion-ease) both; }
-.view-enter .tile:nth-child(1) { animation-delay: 20ms;  }
-.view-enter .tile:nth-child(2) { animation-delay: 55ms;  }
-.view-enter .tile:nth-child(3) { animation-delay: 85ms;  }
-.view-enter .tile:nth-child(4) { animation-delay: 110ms; }
-.view-enter .tile:nth-child(5) { animation-delay: 135ms; }
-.view-enter .tile:nth-child(n+6) { animation-delay: 155ms; }
-
-/* ── keyframes still used by the reactor ──────────────────────────────────── */
 
 @keyframes spin-cw  { to { transform: rotate(360deg); } }
 @keyframes spin-ccw { to { transform: rotate(-360deg); } }
-@keyframes core-breathe {
-  0%, 100% { transform: scale(1);    opacity: 0.85; }
-  50%      { transform: scale(1.09); opacity: 1;    }
-}
-@keyframes ripple-out {
-  0%   { transform: scale(1);   opacity: 0.4; }
-  100% { transform: scale(3.2); opacity: 0;   }
-}
-@keyframes jarvis-dot {
-  0%, 80%, 100% { transform: scale(0.55); opacity: 0.3; }
-  40%           { transform: scale(1);    opacity: 1;   }
-}
-@keyframes ambient-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-@keyframes toast-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(14px) scale(0.95); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
-}
-@keyframes shimmer {
-  from { background-position: -140% 0; }
-  to   { background-position:  240% 0; }
-}
+@keyframes core-breathe { 0%,100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.08); opacity: 1; } }
+@keyframes ripple-out { 0% { transform: scale(1); opacity: .35; } 100% { transform: scale(3); opacity: 0; } }
+@keyframes jarvis-dot { 0%,80%,100% { transform: scale(.55); opacity: .3; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes ambient-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes shimmer { from { background-position: -140% 0; } to { background-position: 240% 0; } }
 
 .skeleton {
-  background: linear-gradient(90deg,
-    rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 100%);
+  background: linear-gradient(90deg, rgba(245,240,230,0.03), rgba(245,240,230,0.08), rgba(245,240,230,0.03));
   background-size: 220% 100%;
   animation: shimmer 1.5s linear infinite;
-  border-radius: var(--r-sm);
 }
 
-.label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.075em;
-  text-transform: uppercase;
-  color: var(--c-dim-mid);
-}
+.label { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 10.5px;
+         font-weight: 400; letter-spacing: 0.24em; text-transform: uppercase; color: var(--c-dim-mid); }
 
-.wordmark-sub { color: var(--c-dim); font-size: 12px; margin-top: 3px; letter-spacing: -0.006em; }
-
-/* ── narrow screens ───────────────────────────────────────────────────────── */
-
-@media (max-width: 640px) {
-  .wordmark-sub { display: none; }
-  .status-dots  { gap: 8px !important; }
-  /* Halves go full width; thirds become halves. */
-  .tile { grid-column: span 6 !important; }
-  .tile.keep-span { grid-column: span 3 !important; }
-  .hud-card { padding: 16px !important; }
-}
-
-@media (max-width: 400px) {
-  .status-dots { display: none !important; }
-}
-
-/* ── reduced motion ───────────────────────────────────────────────────────── */
+.wordmark-sub { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
   }
 }
 
-/* ── holographic instrumentation ──────────────────────────────────────────── */
-/* Technical faces: a squared display face for labels, a mono for every figure.
-   Instrument readings are monospaced so digits sit on a fixed grid — a number
-   that reflows as it changes reads as text, not as a measurement. */
-
-.holo-label {
-  font-family: "Chakra Petch", ui-monospace, monospace;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.19em;
-  text-transform: uppercase;
+/* The content column reserves room for the left rail. When the rail moves to
+   the bottom edge, that reservation has to go with it. */
+@media (max-width: 860px) {
+  .hud-content {
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: 116px 24px 128px !important;
+  }
 }
-
-.holo-num {
-  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
-  font-weight: 300;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.holo-title {
-  font-family: "Chakra Petch", system-ui, sans-serif;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-
-/* The sweep. Slow enough to read as a system scanning rather than a spinner. */
-.holo-sweep { animation: holo-sweep 5.5s linear infinite; }
-@keyframes holo-sweep { to { transform: rotate(360deg); } }
-
-.holo-input::placeholder {
-  color: var(--c-dim);
-  font-family: "Chakra Petch", ui-monospace, monospace;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 11.5px;
-}
-
-.holo-caret {
-  width: 8px;
-  height: 15px;
-  display: block;
-  animation: holo-blink 1.15s steps(1) infinite;
-}
-@keyframes holo-blink { 0%, 55% { opacity: 0.9; } 56%, 100% { opacity: 0; } }
-
-/* Hairline dividers between readouts — a rule, not a border box. */
-.holo-rule {
-  height: 1px;
-  background: linear-gradient(90deg, rgba(61,220,255,0.28), rgba(61,220,255,0.02));
-}
-
-/* Instruments boot rather than fade: the stroke draws itself in. */
-@keyframes holo-boot {
-  from { opacity: 0; transform: scale(0.97); }
-  to   { opacity: 1; transform: none; }
-}
-.holo-boot { animation: holo-boot 620ms var(--motion-ease) both; }

@@ -3,6 +3,7 @@ import { C, RADIUS, TYPE, MOTION, applyTokens } from "./styles/tokens.js";
 import { Icon } from "./ui/Icon.jsx";
 import { Bento, Tile, Stat, Track, Ring, Section, Row, Empty } from "./ui/kit.jsx";
 import { Frame, Readout, Hub, Legend, CommandLine } from "./ui/holo.jsx";
+import { HelmetFrame, BootOverlay, useBootSequence, useParallax } from "./ui/helmet.jsx";
 import "./App.css";
 
 applyTokens();   // mirror the palette onto :root before anything renders
@@ -1511,21 +1512,15 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
 
 // ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
 function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
-  const [time, setTime] = useState(timeStr());
-  const [cmd,  setCmd]  = useState("");
+  const [cmd, setCmd] = useState("");
 
-  useEffect(() => {
-    const id = setInterval(() => setTime(timeStr()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const today   = new Date().toLocaleDateString();
-  const lw      = measurements.weight.slice(-1)[0]?.val;
-  const lwa     = measurements.waist.slice(-1)[0]?.val;
+  const today     = new Date().toLocaleDateString();
+  const lw        = measurements.weight.slice(-1)[0]?.val;
+  const lwa       = measurements.waist.slice(-1)[0]?.val;
   const lastNight = sd.slice(-1)[0]?.hours;
-  const trainedToday = workouts.some(w => w.date === today);
-  const training = isTrainingDay();
-  const ritual   = getTodayRitual();
+  const trained   = workouts.some(w => w.date === today);
+  const training  = isTrainingDay();
+  const ritual    = getTodayRitual();
   const voiceState = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
 
   const handleSubmit = (e) => {
@@ -1535,205 +1530,193 @@ function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, 
     setCmd("");
   };
 
-  const stateColor = { idle:C.cyan, listening:C.red, thinking:C.amber, speaking:C.green }[voiceState];
-  const stateLabel = { idle:"standing by", listening:"receiving", thinking:"processing", speaking:"responding" }[voiceState];
-
-  // ── adherence ──────────────────────────────────────────────────────────────
-  // The hub answers the question the whole project is for: did you do what you
-  // said you would? Four commitments, each a ring. Nutrition detail belongs in
-  // Macros and Body — a home base should say whether the day is on track, not
-  // reprint every number.
+  // Adherence — the one number the whole system exists to produce.
   const commitments = [
-    { key:"intake",   label:"intake",   tone:C.cyan,
-      pct: Math.min(100, macros.cal/TARGET_CAL*100),
-      value: `${Math.round(macros.cal)}/${TARGET_CAL}`, unit:"kcal" },
-    { key:"protein",  label:"protein",  tone:C.green,
-      pct: Math.min(100, macros.protein/TARGET_PROTEIN*100),
-      value: `${Math.round(macros.protein)}/${TARGET_PROTEIN}`, unit:"g" },
-    { key:"training", label:"training", tone:C.amber,
-      pct: trainedToday ? 100 : 0,
-      value: trainedToday ? "logged" : training ? "due" : "rest", unit:"" },
-    { key:"sleep",    label:"sleep",    tone:C.violet,
-      pct: lastNight ? Math.min(100, lastNight/8*100) : 0,
-      value: lastNight ?? "—", unit: lastNight ? "hr" : "" },
+    { label:"intake",   pct: Math.min(100, macros.cal/TARGET_CAL*100),
+      read: `${Math.round(macros.cal)}`, of: `/ ${TARGET_CAL} kcal` },
+    { label:"protein",  pct: Math.min(100, macros.protein/TARGET_PROTEIN*100),
+      read: `${Math.round(macros.protein)}`, of: `/ ${TARGET_PROTEIN} g` },
+    { label:"training", pct: trained ? 100 : 0,
+      read: trained ? "done" : training ? "due" : "rest", of: training ? "session" : "recovery" },
+    { label:"sleep",    pct: lastNight ? Math.min(100, lastNight/8*100) : 0,
+      read: lastNight ?? "—", of: "/ 8 hrs" },
   ];
-  const score = Math.round(commitments.reduce((a,c)=>a+Math.min(100,c.pct),0) / commitments.length);
+  const score = Math.round(commitments.reduce((a,c)=>a+c.pct,0) / commitments.length);
 
-  // ── what's next ────────────────────────────────────────────────────────────
   const upcoming = (calendar.events ?? [])
     .filter(e => e.start?.dateTime && new Date(e.start.dateTime) > new Date())
     .sort((a,b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
   const next = upcoming[0];
-  const minsToNext = next ? Math.round((new Date(next.start.dateTime) - Date.now())/60000) : null;
-  const untilNext  = minsToNext == null ? null
-    : minsToNext < 60 ? `${minsToNext} min`
-    : `${Math.floor(minsToNext/60)}h ${minsToNext%60}m`;
+  const mins = next ? Math.round((new Date(next.start.dateTime) - Date.now())/60000) : null;
+  const until = mins == null ? null : mins < 60 ? `${mins} min` : `${Math.floor(mins/60)}h ${mins%60}m`;
 
   const lightsOn = (hue.lights ?? []).filter(l => l.on).length;
 
-  const systems = [
-    { label:"claude",   on: !!jarvis.apiKey },
-    { label:"spotify",  on: spotify.connected },
-    { label:"calendar", on: calendar.connected },
-    { label:"oura",     on: oura?.connected },
-    { label:"hue",      on: hue.connected },
-  ];
+  // The line under the headline states the day in words. A helmet briefs you;
+  // it doesn't hand you a spreadsheet.
+  const brief = trained
+    ? `Session logged. ${Math.max(0, TARGET_PROTEIN - macros.protein) > 0
+        ? `Protein short by ${Math.round(TARGET_PROTEIN - macros.protein)} grams.` : "Targets clear."}`
+    : training
+      ? `Training due. ${Math.round(Math.max(0, TARGET_CAL - macros.cal))} calories and ${Math.round(Math.max(0, TARGET_PROTEIN - macros.protein))} grams of protein remain.`
+      : isRestDay()
+        ? "Recovery day. Maintenance calories, protein floor holds."
+        : "Active recovery. Light movement, steady nutrition.";
 
   return (
-    <div className="holo-boot">
-      {/* ── status line ── */}
-      <div style={{
-        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
-        marginBottom:22, paddingBottom:14, borderBottom:`1px solid ${C.cyan}1A`,
-      }}>
-        <span className="holo-label" style={{ color:stateColor }}>◈ {stateLabel}</span>
-        <span className="holo-rule" style={{ flex:1, minWidth:20 }} />
-        <span className="holo-label" style={{ color:C.dimMid }}>{todayStr()}</span>
-        <span className="holo-num" style={{ color:C.cyanBright, fontSize:15 }}>{time}</span>
+    <>
+      <div className="hud-label" style={{ color:C.dim, marginBottom:26 }}>
+        {todayStr()}
       </div>
 
-      {/* ── the hub: today's adherence ── */}
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"center",
-        gap:38, flexWrap:"wrap", marginBottom:26,
-      }}>
-        <div style={{ cursor:"pointer" }}
-             onClick={() => {
-               if (jarvis.continuousMode) { jarvis.setContinuousMode(false); jarvis.stopListening(); }
-               else { jarvis.listening ? jarvis.stopListening() : jarvis.startListening(); }
-             }}>
-          <Hub rings={commitments.map(c => ({ pct:c.pct, tone:c.tone, ticks: c.key==="intake" ? 13 : 0 }))}
-               size={296}>
-            <div className="holo-label" style={{ color:stateColor, marginBottom:8, opacity:0.85 }}>
-              {training ? "training day" : isRestDay() ? "rest day" : "active day"}
+      {/* ── the headline. One number, one sentence, a great deal of space. ── */}
+      <div style={{ marginBottom:14 }}>
+        <span className="hud-num" style={{ ...TYPE.hero, color:C.textBright }}>
+          {score}<span style={{ color:C.gold }}>%</span>
+        </span>
+      </div>
+      <div className="hud-label" style={{ color:C.gold, marginBottom:20 }}>on plan</div>
+      <p style={{ ...TYPE.body, color:C.dimMid, maxWidth:"46ch", margin:"0 0 54px" }}>{brief}</p>
+
+      {/* ── commitments as a single strip of hairline gauges ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:1, marginBottom:56 }}>
+        {commitments.map(c => (
+          <div key={c.label} style={{ paddingRight:26 }}>
+            <div className="hud-label" style={{ color:C.dim, marginBottom:11 }}>{c.label}</div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:7, marginBottom:13 }}>
+              <span className="hud-num" style={{ ...TYPE.stat, color:C.textBright }}>{c.read}</span>
+              <span style={{ ...TYPE.small, color:C.dim }}>{c.of}</span>
             </div>
-            <div className="holo-num" style={{
-              fontSize:46, color:C.textBright, lineHeight:1,
-              textShadow:`0 0 30px ${stateColor}66`,
-            }}>{score}<span style={{ fontSize:20, color:C.dimMid }}>%</span></div>
-            <div className="holo-label" style={{ color:C.dimMid, marginTop:8 }}>on plan</div>
-            <div className="holo-label" style={{ color:C.dim, marginTop:14, fontSize:9.5 }}>tap to speak</div>
-          </Hub>
-        </div>
-
-        <Legend items={commitments.map(c => ({
-          label:c.label, value:c.value, unit:c.unit, tone:c.tone,
-        }))} />
+            <div style={{ height:1, background:C.lineSoft, position:"relative" }}>
+              <div style={{
+                position:"absolute", inset:0, width:`${c.pct}%`,
+                background: c.pct >= 100 ? C.gold : C.lineHot,
+                transition:`width 900ms ${MOTION.lock}`,
+              }} />
+            </div>
+          </div>
+        ))}
       </div>
 
-      {/* ── command line ── */}
-      <CommandLine value={cmd} onChange={e=>setCmd(e.target.value)}
-                   onSubmit={handleSubmit} state={voiceState} />
+      {/* ── command ── */}
+      <form onSubmit={handleSubmit} style={{
+        display:"flex", alignItems:"center", gap:14, marginBottom:8,
+        borderBottom:`1px solid ${voiceState==="idle" ? C.line : C.gold}`,
+        paddingBottom:12,
+        transition:`border-color 500ms ${MOTION.ease}`,
+      }}>
+        <span className="hud-num" style={{ color:C.gold, fontSize:14 }}>&gt;</span>
+        <input value={cmd} onChange={e=>setCmd(e.target.value)}
+          placeholder="speak or type"
+          style={{ flex:1, background:"none", border:"none", outline:"none",
+                   color:C.textBright, fontFamily:"inherit", fontSize:15, fontWeight:350 }} />
+        <button type="button"
+          onClick={() => jarvis.listening ? jarvis.stopListening() : jarvis.startListening()}
+          className="hud-label"
+          style={{ background:"none", border:"none", cursor:"pointer",
+                   color: voiceState==="idle" ? C.dim : C.gold }}>
+          {voiceState === "idle" ? "voice" : voiceState}
+        </button>
+        <span className="hud-caret" style={{ background:C.gold }} />
+      </form>
 
       {jarvis.transcript && (
-        <div className="holo-label rise" style={{ color:C.red, margin:"12px 0 0" }}>
-          ▸ {jarvis.transcript}
-        </div>
+        <div className="hud-label rise" style={{ color:C.red, marginBottom:10 }}>▸ {jarvis.transcript}</div>
       )}
       {jarvis.response && (
-        <div className="rise" style={{
-          fontSize:14.5, lineHeight:1.7, color:C.text, margin:"14px 0 0",
-          paddingLeft:14, borderLeft:`1px solid ${C.cyan}44`,
-        }}>
+        <p className="rise" style={{ ...TYPE.body, color:C.text, maxWidth:"58ch", margin:"18px 0 0" }}>
           {jarvis.response}
-        </div>
+        </p>
       )}
 
-      <div style={{ marginTop:14 }}><NowPlaying spotify={spotify} /></div>
+      <div style={{ marginTop:34 }}><NowPlaying spotify={spotify} /></div>
 
-      {/* ── the base: one panel per domain ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12, marginTop:14 }}>
+      {/* ── the rest of the base, as plates ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 46px", marginTop:44 }}>
 
-        <Frame label="next up" span={3} accent={C.cyan}>
+        <div className="plate">
+          <div className="hud-label" style={{ color:C.dimMid, marginBottom:16 }}>next</div>
           {next ? (
             <>
-              <Readout label={untilNext ? `in ${untilNext}` : "now"}
-                       value={new Date(next.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}
-                       size={28} />
-              <div style={{ fontSize:14, color:C.text, marginTop:10 }}>{next.summary}</div>
-              {upcoming.length > 1 && (
-                <>
-                  <div className="holo-rule" style={{ margin:"14px 0" }} />
-                  {upcoming.slice(1,3).map((e,i) => (
-                    <div key={i} style={{ display:"flex", gap:12, padding:"4px 0" }}>
-                      <span className="holo-num" style={{ fontSize:12, color:C.dimMid, minWidth:58 }}>
-                        {new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}
-                      </span>
-                      <span style={{ fontSize:13, color:C.dimMid }}>{e.summary}</span>
-                    </div>
-                  ))}
-                </>
-              )}
+              <div style={{ display:"flex", alignItems:"baseline", gap:9 }}>
+                <span className="hud-num" style={{ ...TYPE.statSm, color:C.textBright }}>
+                  {new Date(next.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}
+                </span>
+                <span style={{ ...TYPE.small, color:C.gold }}>in {until}</span>
+              </div>
+              <div style={{ ...TYPE.body, color:C.dimMid, marginTop:6 }}>{next.summary}</div>
             </>
           ) : (
-            <div className="holo-label" style={{ color:C.dim, lineHeight:2 }}>
-              {calendar.connected ? "nothing scheduled" : "calendar not linked"}
+            <div style={{ ...TYPE.body, color:C.dim }}>
+              {calendar.connected ? "Nothing scheduled." : "Calendar not linked."}
             </div>
           )}
-        </Frame>
+        </div>
 
-        <Frame label="environment" span={3} accent={C.violet}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-            {weather.data
-              ? <Readout label={weather.city || "outside"}
-                         value={Math.round(weather.data.temperature_2m)} unit="°f" size={28} tone={C.violet}
-                         sub={wxDesc(weather.data.weather_code)} />
-              : <Readout label="outside" value="—" size={28} tone={C.dim}
-                         sub={weather.denied ? "location denied" : "locating"} />}
-            <Readout label="lights"
-                     value={hue.connected ? lightsOn : "—"}
-                     unit={hue.connected ? `of ${hue.lights.length}` : ""}
-                     size={28}
-                     tone={lightsOn ? C.amber : C.dimMid}
-                     sub={coffeeOn ? "coffee on" : "coffee off"} />
+        <div className="plate">
+          <div className="hud-label" style={{ color:C.dimMid, marginBottom:16 }}>surroundings</div>
+          <div style={{ display:"flex", gap:40 }}>
+            <div>
+              <span className="hud-num" style={{ ...TYPE.statSm, color:C.textBright }}>
+                {weather.data ? Math.round(weather.data.temperature_2m) : "—"}
+              </span>
+              <span style={{ ...TYPE.small, color:C.dim }}>°F</span>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>
+                {weather.data ? wxDesc(weather.data.weather_code) : weather.denied ? "no location" : "locating"}
+              </div>
+            </div>
+            <div>
+              <span className="hud-num" style={{ ...TYPE.statSm, color: lightsOn ? C.gold : C.textBright }}>
+                {hue.connected ? lightsOn : "—"}
+              </span>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>
+                {hue.connected ? "lights on" : "bridge offline"}
+              </div>
+            </div>
           </div>
-        </Frame>
+        </div>
 
-        <Frame label="body" span={3} accent={C.cyan}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-            <Readout label="mass"  value={lw  ?? "—"} unit={lw ? "lb" : ""} size={28}
-                     sub="target 165–170" />
-            <Readout label="waist" value={lwa ?? "—"} unit={lwa ? "cm" : ""} size={28}
-                     tone={!lwa ? C.cyanBright : lwa <= 84 ? C.green : C.amber}
-                     sub="target 81–84" />
+        <div className="plate">
+          <div className="hud-label" style={{ color:C.dimMid, marginBottom:16 }}>body</div>
+          <div style={{ display:"flex", gap:40 }}>
+            <div>
+              <span className="hud-num" style={{ ...TYPE.statSm, color:C.textBright }}>{lw ?? "—"}</span>
+              <span style={{ ...TYPE.small, color:C.dim }}> lb</span>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 165–170</div>
+            </div>
+            <div>
+              <span className="hud-num" style={{ ...TYPE.statSm, color: lwa && lwa <= 84 ? C.gold : C.textBright }}>
+                {lwa ?? "—"}
+              </span>
+              <span style={{ ...TYPE.small, color:C.dim }}> cm</span>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 81–84</div>
+            </div>
           </div>
-        </Frame>
+        </div>
 
-        <Frame label="systems" span={3} accent={C.dimMid}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 18px" }}>
-            {systems.map(s => (
-              <div key={s.label} style={{ display:"flex", alignItems:"center", gap:9 }}>
-                <span style={{
-                  width:6, height:6, flexShrink:0,
-                  background: s.on ? C.green : C.dim,
-                  boxShadow: s.on ? `0 0 8px ${C.green}` : "none",
-                  transform:"rotate(45deg)",
-                }} />
-                <span className="holo-label" style={{ color: s.on ? C.text : C.dim }}>{s.label}</span>
+        <div className="plate">
+          <div className="hud-label" style={{ color:C.dimMid, marginBottom:16 }}>systems</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"9px 20px" }}>
+            {[["claude", !!jarvis.apiKey], ["spotify", spotify.connected],
+              ["calendar", calendar.connected], ["oura", oura?.connected], ["hue", hue.connected]
+            ].map(([name, on]) => (
+              <div key={name} className="hud-label" style={{
+                display:"flex", alignItems:"center", gap:9, color: on ? C.text : C.dim,
+              }}>
+                <span style={{ color: on ? C.gold : C.line }}>{on ? "◆" : "◇"}</span>
+                {name}
               </div>
             ))}
           </div>
-        </Frame>
+        </div>
 
-        <Frame label="directive" span={6} accent={training ? C.amber : C.cyan}>
-          <div style={{ fontSize:14.5, lineHeight:1.7, color:C.text, maxWidth:600 }}>
-            {training
-              ? trainedToday
-                ? "Session logged. Hold the protein target through the evening and protect tonight's sleep window."
-                : "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — clear the protein target before the session."
-              : isRestDay()
-              ? "Recovery and mobility. Light activity only, maintenance calories, protein floor still holds."
-              : "Active recovery. Light movement, steady nutrition, close the macro targets by end of day."}
+        {ritual && (
+          <div className="plate" style={{ gridColumn:"span 2" }}>
+            <div className="hud-label" style={{ color:C.gold }}>{ritual}</div>
           </div>
-          {ritual && (
-            <>
-              <div className="holo-rule" style={{ margin:"16px 0" }} />
-              <div className="holo-label" style={{ color:C.amber }}>◈ {ritual}</div>
-            </>
-          )}
-        </Frame>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -4392,71 +4375,67 @@ export default function Jarvis() {
     return () => ro.disconnect();
   }, [tab]);
 
+  const booting = useBootSequence(1600);
+  const drift   = useParallax(3);   // content sits on the far plane, barely moving
+
   return (
     <div style={{
       minHeight:"100vh", color:C.text, position:"relative",
-      background: C.bgDeep,   // the aurora layer supplies all the colour
-      overflow: "hidden",
+      background: C.bgDeep, overflowX:"hidden",
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=JetBrains+Mono:wght@200;300;400&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@200;300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
 
-      {/* The light source. Everything glass on the page picks this up. */}
-      <div className="aurora"><span className="a1" /><span className="a2" /><span className="a3" /></div>
-      <div className="grain" />
+      {booting && (
+        <BootOverlay lines={[
+          "mark 42 · initialising",
+          "biometrics · linked",
+          "local systems · nominal",
+          "welcome back, sir",
+        ]} />
+      )}
 
-      {/* Toast */}
+      {/* The visor. Fixed to your view, not to the page. */}
+      <HelmetFrame
+        booting={booting}
+        status={jarvisState === "idle" ? "standing by" : jarvisState}
+        tone={jarvisState === "listening" ? C.red : jarvisState === "thinking" ? C.amber : C.gold}
+        right={[timeStr()]}
+        left={[`${[spotify.connected, calendar.connected, oura.connected, hue.connected].filter(Boolean).length} of 4 systems online`]}
+      />
+
       {notification && (
         <div style={{
-          position:"fixed", bottom:96, left:"50%", zIndex:300,
-          padding:"12px 22px", borderRadius:RADIUS.pill,
-          fontSize:13, fontWeight:580, whiteSpace:"nowrap",
-          animation:`toast-in 320ms ${MOTION.spring}`,
-          backdropFilter:"blur(24px) saturate(160%)",
-          WebkitBackdropFilter:"blur(24px) saturate(160%)",
-          background: notification.type==="error" ? `${C.red}1F` : `${C.green}1A`,
-          border: `1px solid ${notification.type==="error" ? C.red+"55" : C.green+"4D"}`,
-          color: notification.type==="error" ? C.red : C.green,
-          boxShadow:`0 12px 40px rgba(0,0,0,0.5)`,
+          position:"fixed", bottom:38, left:"50%", zIndex:450,
+          transform:"translateX(-50%)", padding:"11px 22px",
+          animation:`toast-in 300ms ${MOTION.lock}`,
+          background:C.bgDeep,
+          border:`1px solid ${notification.type==="error" ? C.red : C.gold}`,
+          color: notification.type==="error" ? C.red : C.goldBright,
+          fontFamily:'"IBM Plex Mono", monospace', fontSize:11,
+          letterSpacing:"0.18em", textTransform:"uppercase", whiteSpace:"nowrap",
         }}>
           {notification.msg}
         </div>
       )}
 
-      {/* ── HEADER ── */}
-      {/* Deliberately thin. The greeting below already says what day it is and
-          the bento already shows the macros — a header repeating both was just
-          taking the top of every screen. */}
-      <div style={{
-        position:"sticky", top:0, zIndex:100,
-        background:"rgba(8,9,12,0.55)",
-        backdropFilter:"blur(28px) saturate(180%)",
-        WebkitBackdropFilter:"blur(28px) saturate(180%)",
-        borderBottom:`1px solid ${C.borderDim}`,
-      }}>
-        <div style={{
-          maxWidth:760, margin:"0 auto", padding:"11px 20px",
-          display:"flex", alignItems:"center", gap:14,
-        }}>
-          <ArcReactor size={30} state={jarvisState} />
-          <div style={{
-            fontFamily:"'Chakra Petch',system-ui,sans-serif", fontSize:16, fontWeight:600,
-            letterSpacing:"0.34em",
-            background:`linear-gradient(100deg, ${C.cyanBright}, ${C.cyan} 50%, ${C.violet})`,
-            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
-          }}>JARVIS</div>
-
-          <div className="status-dots" style={{ marginLeft:"auto", display:"flex", gap:12 }}>
-            <StatusDot on={spotify.connected}  label="Spotify" />
-            <StatusDot on={calendar.connected} label="Cal"     />
-            <StatusDot on={oura.connected}     label="Oura"    />
-            <StatusDot on={hue.connected}      label="Hue"     />
-          </div>
-        </div>
-      </div>
+      {/* ── RAIL — navigation at the edge of vision ── */}
+      <nav className="rail no-scrollbar">
+        {TABS.map(([id, label]) => (
+          <button key={id}
+            className={`rail-item${tab===id?" active":""}`}
+            onClick={()=>setTab(id)}
+          >{label}</button>
+        ))}
+      </nav>
 
       {/* Content — keyed on the tab so switching replays the stagger */}
-      <div key={tab} className="view-enter"
-        style={{ padding:"26px 20px 130px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:2 }}>
+      <div key={tab} className="hud-content"
+        style={{
+          padding:"132px 44px 132px", maxWidth:800,
+          margin:"0 auto 0 max(196px, calc(50% - 400px))",
+          position:"relative", zIndex:2,
+          transform:`translate3d(${drift.x}px, ${drift.y}px, 0)`,
+        }}>
         {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} workouts={workouts} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
@@ -4469,28 +4448,6 @@ export default function Jarvis() {
         {tab==="sleep"         && <SleepTab sleep={sleep} logSleep={logSleep} error={sleepError} notify={notify} oura={oura} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
         {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
-      </div>
-
-      {/* ── DOCK ── */}
-      <div className="dock no-scrollbar">
-        <div className="dock-track" ref={stripRef}>
-        <div className="dock-pill" style={{
-          transform:`translateX(${indicator.x}px)`,
-          width:indicator.w,
-          opacity:indicator.w ? 1 : 0,
-        }} />
-        {TABS.map(([id, label, icon]) => (
-          <button
-            key={id}
-            ref={el => { tabRefs.current[id] = el; }}
-            className={`dock-item${tab===id?" active":""}`}
-            onClick={()=>setTab(id)}
-          >
-            <Icon name={icon} size={16} strokeWidth={tab===id ? 1.9 : 1.6} />
-            {label}
-          </button>
-        ))}
-        </div>
       </div>
 
       {/* Floating orb */}

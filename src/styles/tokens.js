@@ -1,89 +1,93 @@
-// The design system. One source of truth.
+// The design system — "Mark 42": the view from inside the helmet.
 //
-// Defined in JS because the app styles inline (`${C.cyan}55` for alpha), then
-// mirrored onto :root as CSS custom properties so the stylesheet uses the same
-// values.
+// Black, one gold, warm ivory. The discipline that separates a title sequence
+// from a gamer overlay is that the accent appears once per screen and nothing
+// else glows. Space does the work that glow was doing before.
 //
-// Direction: editorial, not dashboard. The ground is neutral near-black so the
-// accents read as emitted light; content sits in a bento of varied tiles rather
-// than a column of identical cards; type carries the hierarchy — one very large
-// number per tile, everything else quiet.
+// Mirrored onto :root at boot so CSS and inline styles read the same values.
 
 export const C = {
-  // ── ground ────────────────────────────────────────────────────────────────
-  // Neutral, not blue-tinted. A coloured ground makes every accent muddy; a
-  // neutral one lets cyan and violet actually glow.
-  bg:         "#08090C",
-  bgDeep:     "#050609",
+  // ── the void ──────────────────────────────────────────────────────────────
+  bg:        "#060606",
+  bgDeep:    "#030303",
+  bgLift:    "#0C0B09",   // warm, so surfaces sit on the gold side of neutral
 
-  // Surfaces are white at low alpha, so they pick up whatever light is behind
-  // them. This is what makes glass read as glass instead of as grey paint.
-  surface:    "rgba(255, 255, 255, 0.038)",
-  surfaceHi:  "rgba(255, 255, 255, 0.062)",
-  surfaceLow: "rgba(255, 255, 255, 0.022)",
-  panel:      "rgba(12, 14, 20, 0.72)",
-  panelSolid: "rgba(12, 14, 20, 0.96)",
+  // Frame and rule work. Warm greys — a cool grey against gold reads as dirt.
+  line:      "#2A2622",
+  lineSoft:  "#191713",
+  lineHot:   "#4A4034",
 
-  border:     "rgba(255, 255, 255, 0.075)",
-  borderHi:   "rgba(255, 255, 255, 0.14)",
-  borderDim:  "rgba(255, 255, 255, 0.045)",
+  // Kept for views not yet converted.
+  surface:   "rgba(255, 248, 232, 0.030)",
+  surfaceHi: "rgba(255, 248, 232, 0.055)",
+  border:    "#2A2622",
+  borderHi:  "#4A4034",
+  borderDim: "#191713",
+  panel:     "rgba(8, 7, 6, 0.82)",
+  panelSolid:"rgba(8, 7, 6, 0.97)",
 
-  // ── accent ────────────────────────────────────────────────────────────────
-  cyan:       "#3DDCFF",
-  cyanBright: "#8BEDFF",
-  cyanDeep:   "#0EA5C6",
-  violet:     "#7C5CFF",
-  blue:       "#4B7BFF",
-  amber:      "#FFB020",
+  // ── the accent. One per screen. ───────────────────────────────────────────
+  gold:      "#C9A227",
+  goldBright:"#F0C64B",
+  goldDeep:  "#7A6115",
 
-  // ── text ──────────────────────────────────────────────────────────────────
-  textBright: "#FBFCFD",
-  text:       "#DDE2EA",
-  dimMid:     "#8A93A3",
-  dim:        "#5C6472",
+  // ── ink ───────────────────────────────────────────────────────────────────
+  textBright:"#F5F0E6",
+  text:      "#D8D0C0",
+  dimMid:    "#8A7F6C",
+  dim:       "#6E6558",
 
-  // ── state ─────────────────────────────────────────────────────────────────
-  green:      "#3DDC97",
-  orange:     "#FF9F45",
-  red:        "#FF5470",
-  yellow:     "#FFC94A",
-  purple:     "#A78BFA",
+  // ── status. Desaturated, so nothing competes with the gold. ───────────────
+  green:     "#7A9E5B",
+  red:       "#C4553D",
+  amber:     "#C9A227",
+  violet:    "#7E6E9E",
+  cyan:      "#5B8C93",
+
+  // Aliases so unconverted views keep rendering.
+  cyanBright:"#7FB3BA",
+  cyanDeep:  "#3E6166",
+  blue:      "#5B8C93",
+  orange:    "#C4713D",
+  yellow:    "#C9A227",
+  purple:    "#7E6E9E",
 };
 
-export const RADIUS = { sm: 10, md: 16, lg: 22, xl: 30, pill: 999 };
-export const SPACE  = { xs: 4, sm: 8, md: 14, lg: 20, xl: 28, xxl: 44 };
+export const RADIUS = { sm: 0, md: 0, lg: 0, xl: 0, pill: 999 };
+export const SPACE  = { xs: 4, sm: 8, md: 14, lg: 22, xl: 34, xxl: 56 };
 
-// One type scale, used everywhere. The jump from `display` to `micro` is the
-// hierarchy — the old build had everything between 9px and 14px, which is why
-// nothing led and nothing receded.
+// Thin at large sizes, and only at large sizes. A 200-weight face below ~24px
+// disappears; the small end carries weight instead.
 export const TYPE = {
-  display: { fontSize: 56, fontWeight: 300, letterSpacing: "-0.04em", lineHeight: 1 },
-  stat:    { fontSize: 44, fontWeight: 300, letterSpacing: "-0.035em", lineHeight: 1 },
-  statSm:  { fontSize: 30, fontWeight: 350, letterSpacing: "-0.03em",  lineHeight: 1 },
-  title:   { fontSize: 21, fontWeight: 600, letterSpacing: "-0.021em", lineHeight: 1.2 },
-  body:    { fontSize: 15, fontWeight: 420, letterSpacing: "-0.011em", lineHeight: 1.5 },
-  small:   { fontSize: 13, fontWeight: 440, letterSpacing: "-0.006em", lineHeight: 1.45 },
-  micro:   { fontSize: 11, fontWeight: 600, letterSpacing: "0.075em", textTransform: "uppercase" },
+  hero:    { fontSize: 104, fontWeight: 200, letterSpacing: "-0.05em",  lineHeight: 0.88 },
+  display: { fontSize: 62,  fontWeight: 200, letterSpacing: "-0.045em", lineHeight: 0.94 },
+  stat:    { fontSize: 34,  fontWeight: 200, letterSpacing: "-0.035em", lineHeight: 1 },
+  statSm:  { fontSize: 25,  fontWeight: 250, letterSpacing: "-0.03em",  lineHeight: 1 },
+  title:   { fontSize: 19,  fontWeight: 400, letterSpacing: "-0.015em", lineHeight: 1.25 },
+  body:    { fontSize: 15,  fontWeight: 350, letterSpacing: "-0.006em", lineHeight: 1.65 },
+  small:   { fontSize: 13,  fontWeight: 400, letterSpacing: "0",        lineHeight: 1.5 },
+  micro:   { fontSize: 10.5,fontWeight: 500, letterSpacing: "0.24em",   textTransform: "uppercase" },
 };
 
 export const MOTION = {
-  spring: "cubic-bezier(0.34, 1.56, 0.64, 1)",
+  // Mechanical, not bouncy. A helmet locks into place.
+  lock:   "cubic-bezier(0.16, 1, 0.3, 1)",
   ease:   "cubic-bezier(0.32, 0.72, 0, 1)",
-  fast:   "160ms",
-  base:   "260ms",
-  slow:   "420ms",
+  spring: "cubic-bezier(0.16, 1, 0.3, 1)",
+  fast:   "180ms",
+  base:   "300ms",
+  slow:   "560ms",
 };
 
-/** Mirror the palette onto :root so CSS can use the same values. */
 export function applyTokens(root = document.documentElement) {
   const set = (k, v) => root.style.setProperty(k, v);
-
   for (const [name, value] of Object.entries(C)) {
     set(`--c-${name.replace(/[A-Z]/g, m => "-" + m.toLowerCase())}`, value);
   }
   for (const [name, value] of Object.entries(RADIUS)) set(`--r-${name}`, `${value}px`);
   for (const [name, value] of Object.entries(SPACE))  set(`--s-${name}`, `${value}px`);
-  set("--motion-spring", MOTION.spring);
+  set("--motion-lock",   MOTION.lock);
+  set("--motion-spring", MOTION.lock);
   set("--motion-ease",   MOTION.ease);
   set("--motion-fast",   MOTION.fast);
   set("--motion-base",   MOTION.base);
