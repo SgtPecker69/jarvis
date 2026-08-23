@@ -4,6 +4,27 @@ Append-only, newest first. One entry per choice that would be annoying to revers
 
 ---
 
+## 2026-08-22 — Memories get their own table, not `events`
+**Why:** `jarvis_memory_file` and the "remember that…" notes are text facts, not numbers and not
+things that happened at a time. Forcing them into `events` would have meant a fake `start_ts` and a
+`title` holding a paragraph. A `memories` table with `kind` = `profile` | `note` costs one table
+and keeps `events` meaning what it says.
+**Instead of:** `events` with `kind='memory'`, which was the cheaper schema and the worse model.
+
+## 2026-08-22 — History starts from today; nothing was recovered
+**Why:** Searched every place the data could be — both browser origins, and the config Gist. Both
+browsers held one key. The Gist held settings, keys and the memory profile, but **none** of
+`jarvis_measurements`, `jarvis_sleep`, `jarvis_workouts` or `jarvis_macro_history`, even though all
+four were in `SYNC_KEYS` and would have been pushed on any write. They were never written — the app
+was used for voice, music and lights, not logging. `jarvis_memories` had been overwritten with the
+string `"undefined"`.
+**What survived:** the AI-written memory profile, 2,192 chars, now in the `memories` table.
+**Consequence:** the Body/Sleep/Training views have no past to render. Accepted — the point of the
+rebuild is that from here forward the data is kept.
+**Not ruled out:** a Chrome profile on disk could still hold it, but Terminal lacks Full Disk Access
+so the search returned a false negative. Judged not worth the friction; nothing was deleted, so
+this can be revisited.
+
 ## 2026-08-22 — Store all three wearables; never silently reconcile them
 **Why:** Oura, Whoop and Apple Watch all measure sleep and heart rate and will report different
 numbers for the same night. Mark wants to see all three. The metrics table is source-tagged, so

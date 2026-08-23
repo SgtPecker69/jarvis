@@ -80,3 +80,18 @@ CREATE TABLE IF NOT EXISTS imports (
   status      TEXT    NOT NULL DEFAULT 'ok',
   error       TEXT
 );
+
+-- ── memories ──────────────────────────────────────────────────────────────────
+-- What Jarvis knows about Mark. Text, not numbers — so it fits neither `metrics`
+-- nor `events`. Two kinds: 'profile' is the single rolling AI-written profile,
+-- 'note' is one remembered fact ("remember that...").
+CREATE TABLE IF NOT EXISTS memories (
+  id          INTEGER PRIMARY KEY,
+  kind        TEXT    NOT NULL,          -- 'profile' | 'note'
+  content     TEXT    NOT NULL,
+  source      TEXT    NOT NULL DEFAULT 'jarvis',
+  external_id TEXT    NOT NULL,          -- 'current' for the profile; old localStorage id for notes
+  created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT,
+  UNIQUE (kind, external_id)             -- re-running the migration overwrites, never duplicates
+);

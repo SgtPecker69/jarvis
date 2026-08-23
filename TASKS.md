@@ -57,12 +57,50 @@ profile with location and habits) from 2026-05-22 until today. Closed and verifi
 native binary here) won't load there, and SQLite can't open files on the `$HOME/mnt` share at all.
 Anything touching the database has to run in Mark's own Terminal.
 
-## Next — Task 3: migrate localStorage into SQLite
+## Task 3: migrate localStorage into SQLite — DONE 2026-08-22
 
-- [ ] Export all ~30 `jarvis_*` keys from the browser before touching anything.
-- [ ] Write the migration for the ones with history worth keeping: `jarvis_macro_history`,
-      `jarvis_measurements`, `jarvis_sleep`, `jarvis_workouts`, `jarvis_memories`.
-- [ ] Verify row counts against the export before deleting anything.
+There was almost nothing to migrate. The hunt mattered more than the migration.
+
+- [x] Exported from both origins. **Both held exactly one key** (`jarvis_macro_date`). The
+      deployed app hydrated localStorage *from* the Gist on load (`src/App.jsx:174`), so closing
+      the leak in task 1 left both browsers empty.
+- [x] Gist recovered — `gist.github.com/SgtPecker69/a56a118c380a0c8d721c5672246b12ba`, 9 keys.
+      It held settings, keys and the memory file. **None of the four history keys were in it**,
+      despite all four being in `SYNC_KEYS` — so they were never written. No workouts, weights,
+      sleep or macros were ever logged.
+- [x] `jarvis_memories` was the literal string `"undefined"` — corrupted at some point, contents
+      unrecoverable.
+- [x] Saved the one survivor: `data/jarvis-rescue.json` — the memory profile, 2,192 chars.
+- [x] `memories` table added (kind `profile` | `note`), since text facts fit neither `metrics`
+      nor `events`.
+- [x] `db/migrate-localstorage.js` written — reads any export in `data/`, upserts, prints
+      in-export vs in-db counts. `npm run db:migrate`. Idempotent, deletes nothing.
+- [x] Verified: profile row is 2,192 chars, byte-identical to the Gist.
+- [x] **`data/jarvis.db` did not exist.** Task 2 was marked done but the file was never built —
+      that session ran in the Linux VM that can't write it. `npm run db:init` fixed it.
+
+**Conclusion: there is no history. Everything starts from today.** Which is why the rest of this
+task became the app work below.
+
+## Task 3b: first view on live data — DONE 2026-08-22
+
+The Body tab is the first thing in the app that reads and writes SQLite instead of localStorage.
+
+- [x] `GET`/`POST /api/metrics` in `server.js`. Rejects a non-numeric value with a real message.
+- [x] `useMeasurements()` in `src/App.jsx` — same `{weight, waist}` shape the views already used,
+      so nothing downstream changed. Names its own failure when the server is down.
+- [x] Body tab rewired. `jarvis_measurements` is no longer read or written.
+- [x] `PORT` now overridable, so a test server can run beside the dev one.
+- [x] Verified end to end in the browser: log → `POST` 200 → row in SQLite → re-read on mount.
+
+**Next, same pattern:** Sleep tab (`sleep_hours`), Training tab (workouts → `events`), macro
+history. Each is a copy of `useMeasurements`.
+
+## Cleanup carried forward
+
+- [ ] **Delete the Gist.** It still holds the rotated-out API keys. Needs a GitHub login.
+- [ ] Remove `_scheduleAutoPush()` (`src/App.jsx:129`) — see task 1. Now doubly dead: it pushes to
+      an endpoint that returns `not-configured`, silently, on every write.
 
 ## Next — Task 4: expand server.js into the real local API
 

@@ -72,20 +72,30 @@ Remote: `git@github.com:SgtPecker69/jarvis.git`
 
 <!-- Update this before ending a session. It's what a fresh session reads first. -->
 
-**As of 2026-08-22:** Foundation started. Tasks 0, 1 and 2 are done.
+**As of 2026-08-22 (evening):** Tasks 0–3 done. The app now reads and writes SQLite for the first
+time.
 
-- Everything committed and pushed (`38a84f6`) — including `server.js`, which had never been tracked.
-- Key leak closed: keys rotated, `GITHUB_PAT`/`GITHUB_GIST_ID` deleted from Vercel, site
-  redeployed, `/api/config` verified returning `not-configured`.
-- `data/jarvis.db` created with five tables: metrics, events, targets, devices, imports.
-  `npm run db:init` builds it. Helpers in `db/index.js`.
+- Key leak closed (task 1): keys rotated, Vercel env vars deleted, `/api/config` returns
+  `not-configured`.
+- `data/jarvis.db` is real now — six tables (metrics, events, targets, devices, imports,
+  **memories**). Note task 2 had been marked done but the file was never actually built; the
+  earlier session ran where it couldn't write. `npm run db:init` builds it, `npm run db:migrate`
+  loads exports.
+- **There was no history to migrate.** Both browser origins held one key; the Gist held settings
+  and the memory profile but none of the four history keys. Nothing was ever logged in those tabs.
+  The only survivor — the 2,192-char memory profile — is in `data/jarvis-rescue.json` and in the
+  `memories` table. Full account in `DECISIONS.md`.
+- **The Body tab is live on SQLite.** `useMeasurements()` reads and writes `/api/metrics`;
+  `jarvis_measurements` is gone from localStorage. Verified end to end in the browser.
 
-The app itself is unchanged and still runs entirely on `localStorage` — nothing reads the new
-database yet.
+Everything else in the app is still on `localStorage`.
 
-**Next up:** Task 3 — migrate the ~30 `jarvis_*` localStorage keys into SQLite. Export from the
-browser first, verify row counts, delete nothing until it's confirmed.
+**Next up:** repeat the Body pattern for Sleep (`sleep_hours`), then Training (workouts →
+`events`). `useMeasurements` in `src/App.jsx` is the template — copy it, change the metric names.
+
+**Still open:** the Gist is undeleted and still holds the rotated-out keys (needs a GitHub login).
+`_scheduleAutoPush()` at `src/App.jsx:129` is still wired in and still fails silently.
 
 **Gotcha:** the Cowork device shell is a Linux VM. `better-sqlite3` here is a macOS binary and
 won't load, and SQLite cannot open files on the `$HOME/mnt` share. Database commands must run in
-Mark's own Terminal.
+Mark's own Terminal. Sessions running directly on the Mac can run them fine.

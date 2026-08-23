@@ -4,6 +4,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { homedir } from "os";
 import { join } from "path";
 import { readFileSync, existsSync } from "fs";
+// The Jarvis database — distinct from the read-only iMessage one opened below.
+import { db as jarvisDb, migrate, putMetric } from "./db/index.js";
 
 const app = express();
 app.use(express.json());
@@ -141,7 +143,49 @@ app.get("/api/plans/health", (req, res) => {
   res.json({ ok: true, dbFound: dbOk });
 });
 
-const PORT = 3001;
+// ─── metrics ──────────────────────────────────────────────────────────────────
+// The database is now the source of truth for anything logged by hand. The
+// browser posts here instead of writing localStorage, so clearing the cache
+// costs nothing.
+
+app.get("/api/metrics", (req, res) => {
+  const { metric, source, limit = 200 } = req.query;
+  if (!metric) return res.status(400).json({ error: "metric is required" });
+
+  try {
+    const rows = source
+      ? jarvisDb.prepare(
+          `SELECT source, metric, value, unit, ts FROM metrics
+           WHERE metric = ? AND source = ? ORDER BY ts DESC LIMIT ?`
+        ).all(metric, source, Number(limit))
+      : jarvisDb.prepare(
+          `SELECT source, metric, value, unit, ts FROM metrics
+           WHERE metric = ? ORDER BY ts DESC LIMIT ?`
+        ).all(metric, Number(limit));
+
+    res.json({ metric, rows: rows.reverse() });   // oldest first, the way charts want it
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/metrics", (req, res) => {
+  const { source = "manual", metric, value, unit = null, ts } = req.body ?? {};
+  if (!metric) return res.status(400).json({ error: "metric is required" });
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return res.status(400).json({ error: "value must be a number" });
+  }
+
+  try {
+    putMetric({ source, metric, value, unit, ts: ts ?? new Date().toISOString() });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const PORT = process.env.PORT ?? 3001;
 app.listen(PORT, () => {
+  migrate();   // create any missing tables at boot, so a fresh clone just works
   console.log(`Jarvis plans server running on http://localhost:${PORT}`);
 });

@@ -3214,20 +3214,26 @@ ${fullText.slice(0, 22000)}` }],
 }
 
 // ─── BODY TAB ─────────────────────────────────────────────────────────────────
-function BodyTab({ measurements, setMeasurements, notify }) {
-  const [inp, setInp] = useState({ weight:"", waist:"" });
+function BodyTab({ measurements, addMeasurement, error, notify }) {
+  const [inp,    setInp]    = useState({ weight:"", waist:"" });
+  const [saving, setSaving] = useState(false);
   const lw  = measurements.weight.slice(-1)[0]?.val;
   const lwa = measurements.waist.slice(-1)[0]?.val;
 
-  const save = () => {
+  const save = async () => {
     const w = parseFloat(inp.weight), wa = parseFloat(inp.waist);
-    const date = new Date().toLocaleDateString();
-    const m = { ...measurements };
-    if (w)  m.weight = [...measurements.weight,  { date, val:w  }].slice(-30);
-    if (wa) m.waist  = [...measurements.waist,   { date, val:wa }].slice(-30);
-    setMeasurements(m);
-    setInp({ weight:"", waist:"" });
-    notify("Measurements saved", "success");
+    if (!w && !wa) { notify("Enter a weight or a waist measurement", "error"); return; }
+
+    setSaving(true);
+    try {
+      await addMeasurement({ weight: w || null, waist: wa || null });
+      setInp({ weight:"", waist:"" });
+      notify("Saved to database ✓", "success");
+    } catch (e) {
+      notify(e.message, "error");   // a failed save says so; it never looks like it worked
+    } finally {
+      setSaving(false);
+    }
   };
 
   const waistTarget = 82.5;
@@ -3242,7 +3248,12 @@ function BodyTab({ measurements, setMeasurements, notify }) {
           <HUDInput label="Waist (cm)" type="number" placeholder="0" value={inp.waist}
             onChange={e=>setInp({...inp,waist:e.target.value})} style={{ marginBottom:0 }} />
         </div>
-        <HUDBtn variant="primary" onClick={save}>Save Measurements</HUDBtn>
+        <HUDBtn variant="primary" onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save Measurements"}
+        </HUDBtn>
+        {error && (
+          <div style={{ marginTop:10, fontSize:12, color:C.orange }}>{error}</div>
+        )}
       </HUDCard>
 
       <HUDCard title="Waist Goal Tracker" accent={lwa && lwa <= 84 ? C.green : C.orange}>
@@ -4133,6 +4144,53 @@ function PlansTab({ apiKey }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// ─── MEASUREMENTS — SQLite, not localStorage ──────────────────────────────────
+// The first view to read and write through the local API. Same shape the UI
+// already expects — { weight: [{date, val}], waist: [{date, val}] } — so nothing
+// downstream cares that the data now outlives the browser cache.
+function useMeasurements() {
+  const [measurements, setMeasurements] = useState({ weight:[], waist:[] });
+  const [error,        setError]        = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [w, wa] = await Promise.all([
+        fetch("/api/metrics?metric=weight_lb&source=manual").then(r => r.json()),
+        fetch("/api/metrics?metric=waist_cm&source=manual").then(r => r.json()),
+      ]);
+      const series = d => (d.rows ?? []).map(r => ({
+        date: new Date(r.ts).toLocaleDateString(), val: r.value, ts: r.ts,
+      }));
+      setMeasurements({ weight: series(w), waist: series(wa) });
+      setError(null);
+    } catch {
+      // Named failure, not silence — the whole app is useless if the server is down.
+      setError("Can't reach the Jarvis server. Is `npm run dev` running?");
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const addMeasurement = useCallback(async ({ weight, waist }) => {
+    const ts   = new Date().toISOString();
+    const rows = [];
+    if (weight) rows.push({ metric:"weight_lb", value:weight, unit:"lb" });
+    if (waist)  rows.push({ metric:"waist_cm",  value:waist,  unit:"cm" });
+
+    for (const row of rows) {
+      const res = await fetch("/api/metrics", {
+        method:  "POST",
+        headers: { "Content-Type":"application/json" },
+        body:    JSON.stringify({ source:"manual", ts, ...row }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
+    }
+    await load();
+  }, [load]);
+
+  return { measurements, addMeasurement, error };
+}
+
 export default function Jarvis() {
   const [tab,           setTab]          = useState("briefing");
   const [macros,        setMacros]       = useLocalStorage("jarvis_macros",       { cal:0, protein:0, carbs:0, fat:0 });
@@ -4140,7 +4198,7 @@ export default function Jarvis() {
   const [macroDate,     setMacroDate]    = useLocalStorage("jarvis_macro_date",    "");
   const [workouts,      setWorkouts]     = useLocalStorage("jarvis_workouts",      []);
   const [briefingDate,  setBriefingDate] = useLocalStorage("jarvis_briefing_date", "");
-  const [measurements,  setMeasurements] = useLocalStorage("jarvis_measurements", { weight:[], waist:[] });
+  const { measurements, addMeasurement, error: measurementsError } = useMeasurements();
   const [sleep,         setSleep]        = useLocalStorage("jarvis_sleep",        []);
   const [hue,           setHue]          = useLocalStorage("jarvis_hue",          { connected:false, bridgeIp:"", username:"", lights:[] });
   const [coffeeOn,      setCoffeeOn]     = useLocalStorage("jarvis_coffee",       false);
@@ -4418,7 +4476,7 @@ export default function Jarvis() {
         {tab==="analytics"     && <AnalyticsTab macros={macros} macroHistory={macroHistory} measurements={measurements} sleep={sleep} />}
         {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
         {tab==="recipes"       && <RecipesTab />}
-        {tab==="body"          && <BodyTab measurements={measurements} setMeasurements={setMeasurements} notify={notify} />}
+        {tab==="body"          && <BodyTab measurements={measurements} addMeasurement={addMeasurement} error={measurementsError} notify={notify} />}
         {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} oura={oura} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} cloudSync={cloudSync} />}
         {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
