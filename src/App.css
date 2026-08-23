@@ -1,202 +1,309 @@
-* { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+/* JARVIS — base styles and motion.
+   The palette lives in src/styles/tokens.js and is mirrored onto :root at boot.
+   Anything here reads from those variables. */
 
-::-webkit-scrollbar { width: 4px; }
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  /* SF on Apple hardware, Inter everywhere else. */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+               system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;   /* Apple's optical tightening */
+}
+
+/* Numbers get tabular figures so they stop shifting as they change. */
+.data-num, .tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.02em;
+}
+
+::selection { background: rgba(34, 211, 238, 0.28); color: var(--c-text-bright); }
+
+/* ── scrollbars ───────────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,200,255,0.12); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,200,255,0.35); }
+::-webkit-scrollbar-thumb {
+  background: rgba(140, 190, 255, 0.14);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(34, 211, 238, 0.4); }
+
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
 
-/* ── KEYFRAMES ─────────────────────────────────────────────────────────────── */
+/* ── atmosphere ───────────────────────────────────────────────────────────── */
+/* One faint grid, fixed behind everything. The old build layered a grid,
+   scanlines and a travelling beam — three effects competing with the content. */
 
-@keyframes spin-cw   { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
-@keyframes spin-ccw  { from { transform: rotate(360deg); } to { transform: rotate(0deg);    } }
+.hud-grid {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(rgba(120, 180, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 180, 255, 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 0%, transparent 78%);
+}
+
+/* ── keyframes ────────────────────────────────────────────────────────────── */
+
+@keyframes spin-cw  { to { transform: rotate(360deg); } }
+@keyframes spin-ccw { to { transform: rotate(-360deg); } }
 
 @keyframes core-breathe {
-  0%, 100% { transform: scale(1);    opacity: 0.82; filter: brightness(1);   }
-  50%       { transform: scale(1.14); opacity: 1;    filter: brightness(1.5); }
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%      { transform: scale(1.09); opacity: 1;    }
 }
 
 @keyframes ripple-out {
-  0%   { transform: scale(1);   opacity: 0.55; }
-  100% { transform: scale(3.8); opacity: 0;    }
+  0%   { transform: scale(1);   opacity: 0.4; }
+  100% { transform: scale(3.2); opacity: 0;   }
 }
 
-@keyframes scan-beam {
-  0%   { top: -1px;   opacity: 0; }
-  3%   { opacity: 1; }
-  97%  { opacity: 1; }
-  100% { top: 100vh; opacity: 0; }
+/* Content arrives from slightly below and settles. Small distance, quick. */
+@keyframes rise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.995); }
+  to   { opacity: 1; transform: none; }
 }
 
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(18px); }
-  to   { opacity: 1; transform: translateY(0);    }
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.96); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
 }
-
-@keyframes notification-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0);    }
-}
-
-@keyframes progress-grow { from { width: 0; } }
 
 @keyframes jarvis-dot {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
-  40%            { transform: scale(1);   opacity: 1;   }
+  0%, 80%, 100% { transform: scale(0.55); opacity: 0.3; }
+  40%           { transform: scale(1);    opacity: 1;   }
 }
 
-@keyframes ambient-pulse {
-  0%, 100% { opacity: 0.5; }
-  50%       { opacity: 1;   }
+@keyframes ambient-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+@keyframes shimmer {
+  from { background-position: -140% 0; }
+  to   { background-position:  240% 0; }
 }
 
-@keyframes data-flicker {
-  0%, 89%, 91%, 100% { opacity: 1;   }
-  90%                 { opacity: 0.6; }
+/* ── entrance ─────────────────────────────────────────────────────────────── */
+/* Cards stagger in. The delay is capped so a long view doesn't crawl. */
+
+.rise { animation: rise var(--motion-base) var(--motion-ease) both; }
+
+.view-enter > * { animation: rise 380ms var(--motion-ease) both; }
+.view-enter > *:nth-child(1) { animation-delay: 0ms;  }
+.view-enter > *:nth-child(2) { animation-delay: 45ms; }
+.view-enter > *:nth-child(3) { animation-delay: 85ms; }
+.view-enter > *:nth-child(4) { animation-delay: 120ms; }
+.view-enter > *:nth-child(5) { animation-delay: 150ms; }
+.view-enter > *:nth-child(n+6) { animation-delay: 175ms; }
+
+/* ── card ─────────────────────────────────────────────────────────────────── */
+/* Depth from material and shadow, not from an outline. The gradient top edge is
+   a single highlight, the way light catches a real surface. */
+
+.hud-card {
+  position: relative;
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 42%),
+    var(--c-surface);
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  border: 1px solid var(--c-border);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.05) inset,
+    0 10px 34px rgba(0,0,0,0.42),
+    0 2px 8px rgba(0,0,0,0.25);
+  transition: transform var(--motion-base) var(--motion-ease),
+              box-shadow var(--motion-base) var(--motion-ease),
+              border-color var(--motion-base) var(--motion-ease);
 }
 
-@keyframes tab-glow {
-  from { transform: translateX(-50%) scaleX(0); opacity: 0; }
-  to   { transform: translateX(-50%) scaleX(1); opacity: 1; }
+.hud-card.interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(34, 211, 238, 0.28);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.07) inset,
+    0 18px 46px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(34, 211, 238, 0.06);
 }
 
-@keyframes header-shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position:  200% center; }
+/* ── buttons ──────────────────────────────────────────────────────────────── */
+
+.hud-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 590;
+  letter-spacing: -0.01em;
+  border-radius: var(--r-sm);
+  padding: 10px 18px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--motion-fast) var(--motion-spring),
+              filter var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-fast) var(--motion-ease);
 }
 
-/* ── UTILITY CLASSES ───────────────────────────────────────────────────────── */
-
-.spin-cw-slow   { animation: spin-cw   10s linear infinite; }
-.spin-ccw-slow  { animation: spin-ccw  14s linear infinite; }
-.spin-cw-med    { animation: spin-cw    4s linear infinite; }
-.spin-ccw-med   { animation: spin-ccw   6s linear infinite; }
-.spin-ccw-fast  { animation: spin-ccw 1.8s linear infinite; }
-.spin-cw-fast   { animation: spin-cw  2.2s linear infinite; }
-.core-breathe   { animation: core-breathe 3s ease-in-out infinite; }
-.core-breathe-fast { animation: core-breathe 1.6s ease-in-out infinite; }
-.ambient-pulse  { animation: ambient-pulse 4s ease-in-out infinite; }
-.fade-in-up     { animation: fadeInUp 0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
-.fade-in        { animation: fadeIn 0.3s ease forwards; }
-.progress-bar-fill { animation: progress-grow 1.1s cubic-bezier(0.4,0,0.2,1); }
-.data-num {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-variant-numeric: tabular-nums;
-  animation: data-flicker 9s ease-in-out infinite;
+.hud-btn:hover:not(:disabled)  { filter: brightness(1.14); }
+/* Presses register physically — the press is where "flow" is actually felt. */
+.hud-btn:active:not(:disabled) { transform: scale(0.972); filter: brightness(0.96); }
+.hud-btn:disabled              { cursor: not-allowed; opacity: 0.45; }
+.hud-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--c-bg), 0 0 0 4px rgba(34, 211, 238, 0.6);
 }
 
-/* ── HUD OVERLAYS ──────────────────────────────────────────────────────────── */
+/* ── inputs ───────────────────────────────────────────────────────────────── */
 
-.hud-scanlines {
+.hud-input {
+  transition: border-color var(--motion-fast) var(--motion-ease),
+              background   var(--motion-fast) var(--motion-ease),
+              box-shadow   var(--motion-fast) var(--motion-ease);
+}
+
+.hud-input::placeholder { color: var(--c-dim); }
+
+.hud-input:focus {
+  border-color: rgba(34, 211, 238, 0.55) !important;
+  background: rgba(34, 211, 238, 0.06) !important;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.10);
+}
+
+/* ── tab bar ──────────────────────────────────────────────────────────────── */
+/* A pill slides between tabs rather than each tab lighting up independently —
+   one object moving reads as a system responding, which is the Instagram feel. */
+
+.tab-strip {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  padding: 3px 0 7px;
+  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent 100%);
+}
+
+.tab-indicator {
+  position: absolute;
+  top: 3px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(135deg, rgba(34,211,238,0.20), rgba(139,92,246,0.16));
+  border: 1px solid rgba(34, 211, 238, 0.34);
+  box-shadow: 0 2px 14px rgba(34, 211, 238, 0.20);
+  transition: transform 420ms var(--motion-spring), width 420ms var(--motion-spring);
   pointer-events: none;
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent, transparent 3px,
-    rgba(0,180,255,0.006) 3px, rgba(0,180,255,0.006) 4px
-  );
-  z-index: 9998;
-}
-
-.hud-scan-beam {
-  pointer-events: none;
-  position: fixed;
-  left: 0; right: 0; height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0,212,255,0.05) 15%,
-    rgba(0,212,255,0.22) 50%,
-    rgba(0,212,255,0.05) 85%,
-    transparent 100%
-  );
-  box-shadow: 0 0 12px rgba(0,212,255,0.18), 0 0 2px rgba(0,212,255,0.4);
-  z-index: 9997;
-  animation: scan-beam 14s linear infinite;
-}
-
-.hud-grid {
-  pointer-events: none;
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0,180,255,0.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,180,255,0.022) 1px, transparent 1px);
-  background-size: 52px 52px;
-  mask-image: radial-gradient(ellipse 100% 100% at 50% 50%, black 40%, transparent 100%);
   z-index: 0;
 }
 
-/* ── CARD ──────────────────────────────────────────────────────────────────── */
-
-.hud-card {
-  transition: border-color 0.35s ease, box-shadow 0.35s ease, transform 0.2s ease;
-  will-change: transform;
-}
-.hud-card:hover {
-  border-color: rgba(0,212,255,0.24) !important;
-  box-shadow:
-    0 8px 40px rgba(0,0,0,0.55),
-    0 0 24px rgba(0,212,255,0.07),
-    inset 0 1px 0 rgba(255,255,255,0.05) !important;
-  transform: translateY(-1px);
-}
-
-/* ── INPUTS ────────────────────────────────────────────────────────────────── */
-
-.hud-input {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-.hud-input:focus {
-  border-color: rgba(0,212,255,0.55) !important;
-  box-shadow: 0 0 0 3px rgba(0,212,255,0.09), inset 0 1px 0 rgba(0,212,255,0.08) !important;
-  outline: none;
-}
-
-/* ── BUTTONS ───────────────────────────────────────────────────────────────── */
-
-.hud-btn {
-  transition: all 0.18s cubic-bezier(0.4,0,0.2,1);
-  position: relative;
-  overflow: hidden;
-}
-.hud-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 50%);
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-.hud-btn:hover:not(:disabled)::before { opacity: 1; }
-.hud-btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.15); }
-.hud-btn:active:not(:disabled) { transform: translateY(0);  filter: brightness(0.9);  }
-
-/* ── TAB BAR ───────────────────────────────────────────────────────────────── */
-
 .tab-btn {
   position: relative;
-  transition: color 0.25s ease;
+  z-index: 1;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  color: var(--c-dim-mid);
+  border-radius: var(--r-pill);
+  transition: color var(--motion-base) var(--motion-ease);
+  white-space: nowrap;
 }
-.tab-btn::after {
-  content: '';
-  position: absolute;
-  bottom: -1px; left: 50%;
-  transform: translateX(-50%) scaleX(0);
-  width: 70%; height: 2px;
-  background: linear-gradient(90deg, transparent, #00c8ff, transparent);
-  border-radius: 1px;
-  box-shadow: 0 0 10px rgba(0,200,255,0.9);
-  transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+
+.tab-btn:hover  { color: var(--c-text); }
+.tab-btn.active { color: var(--c-cyan-bright); font-weight: 640; }
+
+/* ── chips ────────────────────────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 560;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transition: transform var(--motion-fast) var(--motion-spring);
 }
-.tab-btn.active::after { transform: translateX(-50%) scaleX(1); }
+
+.chip:hover { transform: translateY(-1px); }
+
+/* ── labels ───────────────────────────────────────────────────────────────── */
+/* The old build set these at 9px in #2C5870 — technically present, practically
+   unreadable. Bigger, brighter, less tracking. */
+
+.label {
+  font-size: 10.5px;
+  font-weight: 620;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--c-dim-mid);
+}
+
+/* ── loading ──────────────────────────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 100%);
+  background-size: 220% 100%;
+  animation: shimmer 1.5s linear infinite;
+  border-radius: var(--r-sm);
+}
+
+/* ── reduced motion ───────────────────────────────────────────────────────── */
+/* Not decoration — some people get motion sick. Everything still works. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── narrow screens ───────────────────────────────────────────────────────── */
+/* The tagline is charm, not information. It's the first thing to go when space
+   is tight — on a phone it was wrapping to three lines and colliding with the
+   connection dots. */
+
+.wordmark-sub { color: var(--c-dim); font-size: 11px; margin-top: 2px; letter-spacing: 0.01em; }
+
+@media (max-width: 640px) {
+  .wordmark-sub { display: none; }
+  .status-dots  { gap: 8px !important; }
+  .hud-card     { padding: 16px !important; }
+}
+
+@media (max-width: 400px) {
+  /* Below this the dots are noise; the Integrations tab shows the same state. */
+  .status-dots { display: none !important; }
+}

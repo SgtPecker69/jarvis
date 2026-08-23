@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { C, RADIUS, MOTION, applyTokens } from "./styles/tokens.js";
 import "./App.css";
+
+applyTokens();   // mirror the palette onto :root before anything renders
 
 // ─── RECIPE DATA ───────────────────────────────────────────────────────────────
 const RECIPES = [
@@ -37,27 +40,8 @@ const TARGET_CAL     = 1685;
 const TARGET_PROTEIN = 170;
 
 // ─── COLOR SYSTEM ──────────────────────────────────────────────────────────────
-const C = {
-  bg:         "#00060F",
-  panel:      "rgba(0, 10, 26, 0.72)",
-  panelSolid: "rgba(0, 10, 26, 0.96)",
-  border:     "rgba(0, 200, 255, 0.13)",
-  borderHi:   "rgba(0, 200, 255, 0.45)",
-  borderDim:  "rgba(0, 200, 255, 0.05)",
-  cyan:       "#00C8FF",
-  cyanBright: "#40DFFF",
-  blue:       "#0070E0",
-  text:       "#C4E4FF",
-  textBright: "#E8F6FF",
-  dim:        "#2C5870",
-  dimMid:     "#4A7D9A",
-  green:      "#00FF88",
-  orange:     "#FF8000",
-  red:        "#FF1244",
-  yellow:     "#FFD600",
-  purple:     "#8855FF",
-};
-
+// Palette, spacing, radii and motion all live in the design system.
+// Imported rather than defined here so one change reaches every view.
 // ─── HELPERS ───────────────────────────────────────────────────────────────────
 const isTrainingDay = () => [1,2,3,6].includes(new Date().getDay());
 const isRestDay     = () => [0,4].includes(new Date().getDay());
@@ -874,33 +858,41 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
 }
 
 // ─── UI PRIMITIVES ─────────────────────────────────────────────────────────────
+// The card carries the whole system's weight — nearly every view is made of
+// these. Depth now comes from the material (see .hud-card), not from corner
+// brackets drawn on all four corners of every card. Decoration applied
+// uniformly stops meaning anything; the accent survives as a single hairline.
 function HUDCard({ title, children, accent = C.cyan, style = {}, className = "", glow = false }) {
-  const corner = (pos) => {
-    const sz = 20, s = { position:"absolute", width:sz, height:sz, pointerEvents:"none" };
-    const b2 = `2px solid ${accent}`;
-    if (pos==="tl") return {...s, top:-1, left:-1, borderTop:b2, borderLeft:b2, borderRadius:"13px 0 0 0"};
-    if (pos==="tr") return {...s, top:-1, right:-1, borderTop:b2, borderRight:b2, borderRadius:"0 13px 0 0"};
-    if (pos==="bl") return {...s, bottom:-1, left:-1, borderBottom:b2, borderLeft:b2, borderRadius:"0 0 0 13px"};
-    return {...s, bottom:-1, right:-1, borderBottom:b2, borderRight:b2, borderRadius:"0 0 13px 0"};
-  };
   return (
-    <div className={`hud-card fade-in-up ${className}`} style={{
-      position:"relative",
-      background:"rgba(0,10,26,0.7)",
-      backdropFilter:"blur(24px) saturate(160%)",
-      WebkitBackdropFilter:"blur(24px) saturate(160%)",
-      border:`1px solid ${accent}18`,
-      borderRadius:14,
+    <div className={`hud-card ${className}`} style={{
       padding:"18px 20px",
       marginBottom:14,
-      boxShadow:`0 4px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)`,
       ...style,
     }}>
-      {["tl","tr","bl","br"].map(p => <div key={p} style={corner(p)} />)}
-      {glow && <div style={{ position:"absolute", inset:0, borderRadius:14, background:`radial-gradient(ellipse at 50% 0%, ${accent}0A 0%, transparent 65%)`, pointerEvents:"none" }} />}
+      {/* One accent hairline along the top edge, brightest at the left. */}
+      <div style={{
+        position:"absolute", top:0, left:18, right:18, height:1, borderRadius:1,
+        background:`linear-gradient(90deg, ${accent}00, ${accent}70 18%, ${accent}18 60%, transparent)`,
+        pointerEvents:"none",
+      }} />
+
+      {glow && (
+        <div style={{
+          position:"absolute", inset:0, borderRadius:RADIUS.lg, pointerEvents:"none",
+          background:`radial-gradient(ellipse 80% 60% at 50% 0%, ${accent}12 0%, transparent 70%)`,
+        }} />
+      )}
+
       {title && (
-        <div style={{ fontSize:9, letterSpacing:"0.22em", textTransform:"uppercase", color:accent, marginBottom:14, fontWeight:700, display:"flex", alignItems:"center", gap:7 }}>
-          <span style={{ width:4, height:4, borderRadius:"50%", background:accent, boxShadow:`0 0 8px ${accent}`, flexShrink:0, display:"inline-block" }} />
+        <div style={{
+          display:"flex", alignItems:"center", gap:8, marginBottom:14,
+          fontSize:10.5, fontWeight:620, letterSpacing:"0.09em",
+          textTransform:"uppercase", color:accent,
+        }}>
+          <span style={{
+            width:5, height:5, borderRadius:"50%", background:accent,
+            boxShadow:`0 0 10px ${accent}`, flexShrink:0,
+          }} />
           {title}
         </div>
       )}
@@ -909,38 +901,42 @@ function HUDCard({ title, children, accent = C.cyan, style = {}, className = "",
   );
 }
 
-function GlowBar({ pct, color = C.cyan, height = 4 }) {
+function GlowBar({ pct, color = C.cyan, height = 5 }) {
   return (
-    <div style={{ width:"100%", height, background:"rgba(255,255,255,0.04)", borderRadius:height, overflow:"hidden", marginTop:10, position:"relative" }}>
-      <div className="progress-bar-fill" style={{
-        width:`${Math.min(100, pct || 0)}%`, height:"100%",
-        background:`linear-gradient(90deg, ${color}55, ${color}CC, ${color})`,
+    <div style={{
+      width:"100%", height, marginTop:11, borderRadius:height,
+      background:"rgba(255,255,255,0.07)", overflow:"hidden",
+    }}>
+      <div style={{
+        width:`${Math.min(100, Math.max(0, pct || 0))}%`, height:"100%",
         borderRadius:height,
-        boxShadow:`0 0 10px ${color}88, 0 0 20px ${color}33`,
-        transition:"width 1.2s cubic-bezier(0.4,0,0.2,1)",
-        position:"relative",
-      }}>
-        <div style={{ position:"absolute", right:0, top:"50%", transform:"translateY(-50%)", width:3, height:"140%", background:color, borderRadius:2, boxShadow:`0 0 8px ${color}` }} />
-      </div>
+        background:`linear-gradient(90deg, ${color}88, ${color})`,
+        boxShadow:`0 0 12px ${color}66`,
+        // Slow and eased — a bar that snaps reads as a redraw, not a change.
+        transition:`width 900ms ${MOTION.ease}`,
+      }} />
     </div>
   );
 }
 
-function Metric({ label, value, unit, sub, color = C.text, pct, barColor }) {
+// The number is the point, so it gets the size and the tabular figures. The
+// label recedes. That ordering is most of what makes a dashboard readable.
+function Metric({ label, value, unit, sub, color = C.textBright, pct, barColor }) {
   return (
     <div style={{
-      background:"rgba(0,200,255,0.03)",
+      background:"rgba(255,255,255,0.035)",
       border:`1px solid ${C.borderDim}`,
-      borderRadius:10, padding:"14px 16px",
-      position:"relative", overflow:"hidden",
+      borderRadius:RADIUS.md,
+      padding:"14px 16px",
+      position:"relative",
+      overflow:"hidden",
     }}>
-      <div style={{ position:"absolute", top:0, left:0, right:0, height:1, background:`linear-gradient(90deg, transparent, ${color}22, transparent)` }} />
-      <div style={{ fontSize:9, letterSpacing:"0.18em", color:C.dimMid, marginBottom:6, textTransform:"uppercase", fontWeight:600 }}>{label}</div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
-        <span className="data-num" style={{ fontSize:26, fontWeight:700, color, lineHeight:1 }}>{value}</span>
-        {unit && <span style={{ fontSize:11, color:C.dimMid, marginBottom:2 }}>{unit}</span>}
+      <div className="label" style={{ marginBottom:8 }}>{label}</div>
+      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
+        <span className="data-num" style={{ fontSize:30, fontWeight:680, color, lineHeight:1 }}>{value}</span>
+        {unit && <span style={{ fontSize:12, color:C.dimMid, fontWeight:520 }}>{unit}</span>}
       </div>
-      {sub && <div style={{ fontSize:11, color:C.dimMid, marginTop:4 }}>{sub}</div>}
+      {sub && <div style={{ fontSize:12, color:C.dimMid, marginTop:5 }}>{sub}</div>}
       {pct !== undefined && <GlowBar pct={pct} color={barColor || color} />}
     </div>
   );
@@ -1015,38 +1011,59 @@ function ArcReactor({ size = 60, state = "idle" }) {
   );
 }
 
+// Sentence case, not uppercase — uppercase everywhere was costing legibility for
+// no hierarchy in return. The primary action gets the cyan→violet gradient; it's
+// the only element on a screen allowed to have it, which is what makes it read
+// as the primary action.
 function HUDBtn({ onClick, children, variant = "default", style = {}, disabled = false }) {
   const variants = {
-    primary: { bg:`linear-gradient(135deg, rgba(0,200,255,0.15), rgba(0,112,224,0.2))`, border:`1px solid ${C.cyan}55`, color:C.cyan, shadow:`0 0 20px ${C.cyan}22` },
-    success: { bg:`linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,200,100,0.08))`, border:`1px solid ${C.green}55`, color:C.green, shadow:`0 0 20px ${C.green}22` },
-    danger:  { bg:`linear-gradient(135deg, rgba(255,18,68,0.15), rgba(200,0,50,0.1))`,   border:`1px solid ${C.red}55`,   color:C.red,   shadow:`0 0 20px ${C.red}22`  },
-    default: { bg:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", color:C.text, shadow:"none" },
+    primary: {
+      background: `linear-gradient(135deg, ${C.cyan}2E, ${C.violet}24)`,
+      border:     `1px solid ${C.cyan}66`,
+      color:      C.cyanBright,
+      boxShadow:  `0 2px 16px ${C.cyan}22, inset 0 1px 0 rgba(255,255,255,0.10)`,
+    },
+    success: {
+      background: `linear-gradient(135deg, ${C.green}26, ${C.green}12)`,
+      border:     `1px solid ${C.green}55`,
+      color:      C.green,
+      boxShadow:  `inset 0 1px 0 rgba(255,255,255,0.08)`,
+    },
+    danger: {
+      background: `linear-gradient(135deg, ${C.red}26, ${C.red}12)`,
+      border:     `1px solid ${C.red}55`,
+      color:      C.red,
+      boxShadow:  `inset 0 1px 0 rgba(255,255,255,0.08)`,
+    },
+    default: {
+      background: "rgba(255,255,255,0.055)",
+      border:     `1px solid ${C.border}`,
+      color:      C.text,
+      boxShadow:  "inset 0 1px 0 rgba(255,255,255,0.05)",
+    },
   };
-  const v = variants[variant] || variants.default;
   return (
-    <button className="hud-btn" onClick={onClick} disabled={disabled} style={{
-      background:v.bg, border:v.border, color:v.color,
-      borderRadius:8, padding:"9px 18px",
-      fontSize:12, fontWeight:600, cursor:disabled?"not-allowed":"pointer",
-      letterSpacing:"0.06em", opacity:disabled?0.4:1,
-      boxShadow:v.shadow, textTransform:"uppercase",
-      ...style,
-    }}>{children}</button>
+    <button className="hud-btn" onClick={onClick} disabled={disabled}
+      style={{ ...(variants[variant] || variants.default), ...style }}>
+      {children}
+    </button>
   );
 }
 
 function HUDInput({ label, style = {}, ...props }) {
   return (
     <div style={{ marginBottom:14, ...style }}>
-      {label && <div style={{ fontSize:9, letterSpacing:"0.18em", textTransform:"uppercase", color:C.dimMid, marginBottom:6, fontWeight:600 }}>{label}</div>}
+      {label && <div className="label" style={{ marginBottom:7 }}>{label}</div>}
       <input className="hud-input" {...props} style={{
         width:"100%",
-        background:"rgba(0,200,255,0.04)",
+        background:"rgba(255,255,255,0.045)",
         border:`1px solid ${C.border}`,
-        borderRadius:8, padding:"10px 14px",
-        color:C.text, fontSize:13, outline:"none",
-        fontFamily:"inherit", boxSizing:"border-box",
-        transition:"border-color 0.2s, box-shadow 0.2s",
+        borderRadius:RADIUS.sm,
+        padding:"11px 14px",
+        color:C.textBright,
+        fontSize:14,
+        outline:"none",
+        fontFamily:"inherit",
       }} />
     </div>
   );
@@ -1136,7 +1153,7 @@ function NowPlaying({ spotify }) {
 
       {/* Device picker dropdown */}
       {showDevices && (
-        <div className="fade-in-up" style={{
+        <div className="rise" style={{
           position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:200,
           background:"rgba(0,8,24,0.97)", backdropFilter:"blur(20px)",
           WebkitBackdropFilter:"blur(20px)",
@@ -1516,43 +1533,45 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
   };
 
   const stateColor = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[voiceState];
-  const idleLabel  = jarvis.continuousMode ? "LISTENING CONTINUOUSLY" : "TAP TO SPEAK";
-  const stateLabel = { idle:idleLabel, listening:"LISTENING", thinking:"PROCESSING", speaking:"RESPONDING" }[voiceState];
+  const idleLabel  = jarvis.continuousMode ? "Listening continuously" : "Tap to speak";
+  const stateLabel = { idle:idleLabel, listening:"Listening", thinking:"Thinking", speaking:"Responding" }[voiceState];
 
   return (
     <>
       {/* ── Voice Interface — HERO ── */}
+      {/* The one screen that should feel alive. State is carried by light: an
+          aura behind the reactor that changes colour and intensity, rather than
+          brackets and outlines switching colour. */}
       <div style={{
         position:"relative", marginBottom:14, overflow:"hidden",
-        background:"rgba(0,8,22,0.75)",
-        backdropFilter:"blur(28px) saturate(180%)",
-        WebkitBackdropFilter:"blur(28px) saturate(180%)",
-        border:`1px solid ${stateColor}22`,
-        borderRadius:20,
-        padding:"32px 24px 28px",
-        boxShadow:`0 0 60px ${stateColor}0D, 0 8px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04)`,
-        transition:"border-color 0.5s, box-shadow 0.5s",
+        background:`
+          radial-gradient(ellipse 70% 55% at 50% 42%, ${stateColor}14 0%, transparent 70%),
+          linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 38%),
+          ${C.surface}`,
+        backdropFilter:"blur(32px) saturate(170%)",
+        WebkitBackdropFilter:"blur(32px) saturate(170%)",
+        border:`1px solid ${stateColor}2E`,
+        borderRadius:RADIUS.xl,
+        padding:"38px 24px 30px",
+        boxShadow:`
+          0 0 80px ${stateColor}14,
+          0 16px 50px rgba(0,0,0,0.55),
+          inset 0 1px 0 rgba(255,255,255,0.07)`,
+        transition:`border-color 600ms ${MOTION.ease}, box-shadow 600ms ${MOTION.ease}, background 600ms ${MOTION.ease}`,
         textAlign:"center",
       }}>
-        {/* Corner brackets */}
-        {[["tl","top","left"],["tr","top","right"],["bl","bottom","left"],["br","bottom","right"]].map(([k,v,h])=>(
-          <div key={k} style={{ position:"absolute", width:24, height:24, [v]:-1, [h]:-1, pointerEvents:"none",
-            [`border${v.charAt(0).toUpperCase()+v.slice(1)}`]:`2px solid ${stateColor}`,
-            [`border${h.charAt(0).toUpperCase()+h.slice(1)}`]:`2px solid ${stateColor}`,
-            borderRadius: k==="tl"?"20px 0 0 0":k==="tr"?"0 20px 0 0":k==="bl"?"0 0 0 20px":"0 0 20px 0",
-            transition:"border-color 0.5s",
-          }} />
-        ))}
+        {/* Single hairline of light along the top edge. */}
+        <div style={{ position:"absolute", top:0, left:"22%", right:"22%", height:1,
+          background:`linear-gradient(90deg, transparent, ${stateColor}AA, transparent)`,
+          transition:`background 600ms ${MOTION.ease}` }} />
 
-        {/* Top ambient glow */}
-        <div style={{ position:"absolute", top:0, left:"20%", right:"20%", height:1,
-          background:`linear-gradient(90deg, transparent, ${stateColor}88, transparent)`,
-          boxShadow:`0 0 16px ${stateColor}66`, transition:"background 0.5s" }} />
-
-        {/* Label */}
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:8, letterSpacing:"0.35em",
-          color:stateColor, marginBottom:28, opacity:0.7, transition:"color 0.5s" }}>
-          J · A · R · V · I · S
+        <div style={{
+          fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:9, fontWeight:600,
+          letterSpacing:"0.42em", textIndent:"0.42em",
+          color:stateColor, marginBottom:30, opacity:0.55,
+          transition:`color 600ms ${MOTION.ease}`,
+        }}>
+          JARVIS
         </div>
 
         {/* Arc Reactor — the hero */}
@@ -1575,16 +1594,19 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
         </div>
 
         {/* State indicator */}
-        <div style={{ fontFamily:"'Orbitron',monospace", fontSize:9, letterSpacing:"0.28em",
-          color:stateColor, marginBottom:16, transition:"color 0.5s",
-          textShadow:`0 0 16px ${stateColor}88` }}>
+        <div style={{
+          fontSize:14, fontWeight:560, letterSpacing:"-0.005em",
+          color:stateColor, marginBottom:18,
+          transition:`color 600ms ${MOTION.ease}`,
+        }}>
           {stateLabel}
         </div>
 
         {/* Mode toggle — Manual vs Conversation */}
-        <div style={{ display:"inline-flex", borderRadius:10, overflow:"hidden",
-          border:`1px solid ${C.border}`, marginBottom:20, flexShrink:0 }}>
-          {[["manual","MANUAL"],["conversation","CONVERSATION"]].map(([mode, label]) => {
+        <div style={{ display:"inline-flex", borderRadius:RADIUS.pill, overflow:"hidden",
+          border:`1px solid ${C.border}`, background:"rgba(255,255,255,0.04)",
+          marginBottom:22, flexShrink:0 }}>
+          {[["manual","Manual"],["conversation","Conversation"]].map(([mode, label]) => {
             const active = (mode === "conversation") === jarvis.continuousMode;
             const accent = mode === "conversation" ? C.green : C.cyan;
             return (
@@ -1601,11 +1623,11 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
                 background: active ? `${accent}1A` : "transparent",
                 border: "none",
                 borderRight: mode === "manual" ? `1px solid ${C.border}` : "none",
-                padding:"7px 18px",
-                fontSize:9, letterSpacing:"0.2em", fontFamily:"'Orbitron',monospace",
-                fontWeight:600, cursor:"pointer",
+                padding:"8px 20px",
+                fontSize:13, letterSpacing:"-0.005em", fontFamily:"inherit",
+                fontWeight:580, cursor:"pointer",
                 color: active ? accent : C.dimMid,
-                transition:"all 0.2s",
+                transition:`all ${MOTION.base} ${MOTION.ease}`,
                 boxShadow: active ? `inset 0 0 12px ${accent}18` : "none",
               }}>
                 {label}
@@ -1616,7 +1638,7 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
 
         {/* Transcript */}
         {jarvis.transcript && (
-          <div className="fade-in-up" style={{
+          <div className="rise" style={{
             fontSize:13, color:C.red, marginBottom:12, fontStyle:"italic",
             opacity:0.9, letterSpacing:"0.02em",
           }}>
@@ -1626,7 +1648,7 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
 
         {/* Response */}
         {jarvis.response && (
-          <div className="fade-in-up" style={{
+          <div className="rise" style={{
             fontSize:15, color:C.textBright, lineHeight:1.7, marginBottom:20,
             maxWidth:520, margin:"0 auto 20px", fontWeight:400,
           }}>
@@ -4392,70 +4414,100 @@ export default function Jarvis() {
 
   const jarvisState = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
 
-  return (
-    <div style={{ fontFamily:"'DM Sans','SF Pro Display',system-ui,sans-serif", minHeight:"100vh", color:C.text, position:"relative",
-      background:`radial-gradient(ellipse 110% 55% at 50% -5%, rgba(0,90,200,0.16) 0%, transparent 65%), radial-gradient(ellipse 70% 50% at 95% 100%, rgba(0,40,100,0.18) 0%, transparent 60%), ${C.bg}` }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Orbitron:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  // ── sliding tab indicator ───────────────────────────────────────────────────
+  // Measure the active tab and move one pill to it, rather than lighting each
+  // tab independently. Also scrolls the tab into view, so selecting something at
+  // the edge of the strip doesn't leave it half off-screen.
+  const stripRef = useRef(null);
+  const tabRefs  = useRef({});
+  const [indicator, setIndicator] = useState({ x: 0, w: 0 });
 
-      {/* Layered HUD atmosphere */}
+  useEffect(() => {
+    const move = () => {
+      const el = tabRefs.current[tab];
+      if (!el) return;
+      setIndicator({ x: el.offsetLeft, w: el.offsetWidth });
+      el.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+    };
+    move();
+
+    // Re-measure when the strip resizes; label widths change with the viewport.
+    const ro = new ResizeObserver(move);
+    if (stripRef.current) ro.observe(stripRef.current);
+    return () => ro.disconnect();
+  }, [tab]);
+
+  return (
+    <div style={{
+      minHeight:"100vh", color:C.text, position:"relative",
+      // Two soft light sources rather than a flat fill — the room the UI sits in.
+      background:`
+        radial-gradient(ellipse 100% 50% at 50% -8%, ${C.cyan}14 0%, transparent 62%),
+        radial-gradient(ellipse 70% 46% at 92% 104%, ${C.violet}10 0%, transparent 60%),
+        ${C.bg}`,
+    }}>
+      <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap" rel="stylesheet" />
+
       <div className="hud-grid" />
-      <div className="hud-scanlines" />
-      <div className="hud-scan-beam" />
 
       {/* Toast */}
       {notification && (
         <div style={{
-          position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)",
-          padding:"11px 24px", borderRadius:10, fontSize:12, fontWeight:600, zIndex:300,
-          whiteSpace:"nowrap", animation:"notification-in 0.3s ease",
-          backdropFilter:"blur(20px)",
-          background: notification.type==="error" ? "rgba(255,18,68,0.18)" : "rgba(0,255,136,0.1)",
-          border: `1px solid ${notification.type==="error" ? C.red+"66" : C.green+"55"}`,
+          position:"fixed", bottom:96, left:"50%", zIndex:300,
+          padding:"12px 22px", borderRadius:RADIUS.pill,
+          fontSize:13, fontWeight:580, whiteSpace:"nowrap",
+          animation:`toast-in 320ms ${MOTION.spring}`,
+          backdropFilter:"blur(24px) saturate(160%)",
+          WebkitBackdropFilter:"blur(24px) saturate(160%)",
+          background: notification.type==="error" ? `${C.red}1F` : `${C.green}1A`,
+          border: `1px solid ${notification.type==="error" ? C.red+"55" : C.green+"4D"}`,
           color: notification.type==="error" ? C.red : C.green,
-          boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 20px ${notification.type==="error" ? C.red : C.green}22`,
-          letterSpacing:"0.04em",
+          boxShadow:`0 12px 40px rgba(0,0,0,0.5)`,
         }}>
           {notification.msg}
         </div>
       )}
 
       {/* ── HEADER ── */}
+      {/* Apple's translucent chrome: the content scrolls under it and stays
+          faintly visible, which is what keeps a sticky bar from feeling like a lid. */}
       <div style={{
         position:"sticky", top:0, zIndex:100,
-        background:"rgba(0,5,15,0.88)",
-        backdropFilter:"blur(28px) saturate(160%)",
-        WebkitBackdropFilter:"blur(28px) saturate(160%)",
-        borderBottom:`1px solid rgba(0,200,255,0.08)`,
-        boxShadow:"0 1px 0 rgba(0,200,255,0.05), 0 8px 32px rgba(0,0,0,0.4)",
+        background:"rgba(4,7,14,0.72)",
+        backdropFilter:"blur(32px) saturate(180%)",
+        WebkitBackdropFilter:"blur(32px) saturate(180%)",
+        borderBottom:`1px solid ${C.border}`,
       }}>
-        {/* Subtle top accent line */}
-        <div style={{ height:1, background:`linear-gradient(90deg, transparent 0%, ${C.cyan}55 30%, ${C.cyan}99 50%, ${C.cyan}55 70%, transparent 100%)`, boxShadow:`0 0 12px ${C.cyan}44` }} />
-
-        <div style={{ padding:"10px 20px 0", maxWidth:760, margin:"0 auto" }}>
+        <div style={{ padding:"12px 20px 0", maxWidth:760, margin:"0 auto" }}>
           {/* Top row */}
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
             {/* Logo + reactor */}
             <div style={{ display:"flex", alignItems:"center", gap:14 }}>
               <ArcReactor size={40} state={jarvisState} />
               <div>
-                <div style={{ fontFamily:"'Orbitron',monospace", fontSize:13, letterSpacing:"0.3em", color:C.cyan, fontWeight:700,
-                  textShadow:`0 0 20px ${C.cyan}88, 0 0 40px ${C.cyan}44` }}>
-                  J.A.R.V.I.S
+                {/* Orbitron survives here and nowhere else. A display face used
+                    once is identity; used everywhere it's costume. */}
+                <div style={{
+                  fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:15, fontWeight:800,
+                  letterSpacing:"0.16em",
+                  background:`linear-gradient(100deg, ${C.cyanBright}, ${C.cyan} 45%, ${C.violet})`,
+                  WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
+                }}>
+                  JARVIS
                 </div>
-                <div style={{ fontSize:10, color:C.dimMid, letterSpacing:"0.08em", marginTop:1 }}>Just A Rather Very Intelligent System</div>
+                <div className="wordmark-sub">Just A Rather Very Intelligent System</div>
               </div>
             </div>
 
             {/* Right status */}
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:10, letterSpacing:"0.12em", fontWeight:700, fontFamily:"'Orbitron',monospace",
+              <div style={{
+                fontSize:11, fontWeight:640, letterSpacing:"0.04em", marginBottom:7,
                 color: training ? C.orange : isRestDay() ? C.purple : C.green,
-                textShadow:`0 0 12px currentColor`,
-                marginBottom:6,
               }}>
-                {training ? "⚡ TRAINING DAY" : isRestDay() ? "◐ REST DAY" : "● ACTIVE DAY"}
+                {training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
               </div>
-              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <div className="status-dots" style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
                 <StatusDot on={spotify.connected}  label={spotify.connected && spotify.expiry && (spotify.expiry - Date.now() < 10*60*1000) ? "Spotify ⚠" : "Spotify"}  />
                 <StatusDot on={calendar.connected} label={calendar.connected && calendar.expiry && (calendar.expiry - Date.now() < 10*60*1000) ? "Cal ⚠" : "Cal"}      />
                 <StatusDot on={oura.connected}     label="Oura"     />
@@ -4472,34 +4524,34 @@ export default function Jarvis() {
               weather.data && { label:`${Math.round(weather.data.temperature_2m)}° ${wxEmoji(weather.data.weather_code)}`, color:C.blue },
               { label: new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}), color:C.dimMid },
             ].filter(Boolean).map((p, i) => (
-              <span key={i} style={{
-                padding:"4px 12px", borderRadius:20, fontSize:10, fontWeight:600,
-                background:`${p.color}12`, color:p.color,
-                border:`1px solid ${p.color}30`,
-                letterSpacing:"0.06em",
-                boxShadow:`inset 0 1px 0 ${p.color}15`,
+              <span key={i} className="chip data-num" style={{
+                background:`${p.color}14`, color:p.color, border:`1px solid ${p.color}2E`,
               }}>{p.label}</span>
             ))}
           </div>
 
-          {/* Tab bar */}
-          <div style={{ display:"flex", gap:0, overflowX:"auto", scrollbarWidth:"none" }}>
+          {/* Tab bar — one pill slides between tabs (see .tab-indicator) */}
+          <div className="tab-strip no-scrollbar" ref={stripRef}>
+            <div className="tab-indicator" style={{
+              transform:`translateX(${indicator.x}px)`,
+              width:indicator.w,
+              opacity:indicator.w ? 1 : 0,
+            }} />
             {TABS.map(([id, label]) => (
-              <button key={id} className={`tab-btn${tab===id?" active":""}`} onClick={()=>setTab(id)} style={{
-                padding:"10px 14px", fontSize:11, fontWeight: tab===id ? 700 : 500,
-                color: tab===id ? C.cyan : C.dimMid,
-                background:"none", border:"none",
-                cursor:"pointer", whiteSpace:"nowrap",
-                letterSpacing:"0.1em", textTransform:"uppercase",
-                textShadow: tab===id ? `0 0 12px ${C.cyan}` : "none",
-              }}>{label}</button>
+              <button
+                key={id}
+                ref={el => { tabRefs.current[id] = el; }}
+                className={`tab-btn${tab===id?" active":""}`}
+                onClick={()=>setTab(id)}
+              >{label}</button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Content */}
-      <div style={{ padding:"24px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
+      {/* Content — keyed on the tab so switching replays the stagger */}
+      <div key={tab} className="view-enter"
+        style={{ padding:"26px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
         {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}

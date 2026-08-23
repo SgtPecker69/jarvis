@@ -207,9 +207,28 @@ if they differ — that's a 2-minute change in `server/ingest/parsers.js`.
 
 ## Later
 
-- **Task 8 — design system.** The "top in class" pass. Refined dark palette, real typographic
-  scale, purposeful motion, restraint with glow/glass. Tokens defined once, inherited everywhere.
-  Keep the JARVIS ambition; drop the TEMU execution.
+- **Task 8 — design system. DONE 2026-08-22.** `src/styles/tokens.js` holds the palette, spacing,
+  radii and motion curves, mirrored onto `:root` at boot so CSS and inline styles read the same
+  values. Because the shared primitives (`HUDCard`, `HUDBtn`, `HUDInput`, `Metric`, `GlowBar`) all
+  consume them, every view inherited the redesign without being rewritten.
+
+  What changed and why:
+  - **Corner brackets removed.** Four brackets on every card was the main "TEMU" tell — decoration
+    applied uniformly stops carrying meaning. Depth now comes from the material: layered surface,
+    real shadow, one inner highlight, and a single accent hairline per card.
+  - **Palette rebuilt.** Deeper blue-black ground so cyan reads as emitted light. A real neutral
+    text ramp replaces the all-cyan tint, and labels went from `#2C5870` at 9px — technically
+    present, practically unreadable — to a legible size and weight.
+  - **Type.** System/SF stack with Apple's optical tightening; tabular figures so numbers stop
+    shifting as they change. Orbitron survives on the wordmark and the hero only — a display face
+    used once is identity, used everywhere it's costume. Uppercase is now reserved for labels.
+  - **Motion.** Two curves (spring, ease) as tokens. Staggered card entrance keyed on the tab,
+    physical button presses, a tab pill that slides between tabs rather than each tab lighting up
+    independently. `prefers-reduced-motion` fully respected.
+  - **Atmosphere reduced** from three competing effects (grid, scanlines, travelling beam) to one
+    masked grid.
+  - **Responsive**: the tagline and connection dots drop out on phones, where they were wrapping
+    into each other.
 - **Task 9 — break up `App.jsx`.** Hooks, components, one file per view. Deliberately after the
   design system, so it's split along the lines the new UI actually needs.
 - **Task 10 — rebuild core views on live data.** Briefing, Analytics, Environment, Sleep, Body.
