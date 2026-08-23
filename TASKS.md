@@ -149,15 +149,34 @@ Idempotent, backfill on wake. A closed lid means late data, not lost data.
 - [ ] Google Calendar
 - [ ] Hue / LAN device state
 
-## Next — Task 6: the watched-folder ingester
+## Task 6: the watched-folder ingester — BUILT 2026-08-22, parsers unconfirmed
 
-The Mac-as-API centerpiece. Anything dropped in a folder gets parsed into SQLite.
+Drop a CSV in `~/Jarvis Inbox` and it lands in SQLite. Override the location with `JARVIS_INBOX`.
 
-- [ ] Rocket Money transaction CSV — covers Chase and subscription creep in one file
-- [ ] MyFitnessPal nutrition export (Premium confirmed, so the full export is available)
-- [ ] ConEd Green Button — confirm Download-My-Data vs Connect-My-Data first
-- [ ] Apple Health export — consider Health Auto Export writing to the folder on a schedule so it
-      stops being a manual chore
+- [x] `server/ingest/` — a real CSV parser (exports quote fields containing commas, so splitting
+      on `,` loses rows), format detection by header, and the writer.
+- [x] Idempotent: `imports.file_hash` is UNIQUE, so re-dropping a file is a no-op. Verified by
+      scanning the same folder twice — second pass wrote nothing.
+- [x] Backfills on wake: the whole folder is scanned at startup, so a file dropped while the
+      laptop was shut is late data, not lost data.
+- [x] Live watcher with a 1.5s settle, because a file being copied in fires several events and may
+      be half-written when the first arrives. Verified with a live drop.
+- [x] Unrecognised files are **recorded**, not ignored — `imports.status = 'unrecognised'` with the
+      column names it saw. A drop that does nothing and says nothing is the failure mode.
+- [x] `GET /api/imports` — history, including failures. `POST /api/imports/scan` forces a re-scan.
+- [x] `npm run ingest:check <file>` — dry run, prints what a parser makes of a file, writes nothing.
+
+**Parsers are written from documented formats, not from Mark's actual exports.** Rocket Money,
+MyFitnessPal and ConEd Green Button are all implemented and tested against synthetic files with
+those column names. Run `ingest:check` on the first real export of each and fix the column names
+if they differ — that's a 2-minute change in `server/ingest/parsers.js`.
+
+- [ ] Confirm Rocket Money's real column names against an export.
+- [ ] Confirm MyFitnessPal's real column names against an export.
+- [ ] ConEd Green Button — still need to confirm Download-My-Data vs Connect-My-Data, and whether
+      it arrives as CSV or XML. The parser assumes CSV.
+- [ ] Apple Health export — not started. It's XML, not CSV, so it needs its own path. Health Auto
+      Export writing CSV to the inbox on a schedule would avoid that entirely.
 
 ## Next — Task 7: launchd agent
 

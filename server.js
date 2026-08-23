@@ -10,6 +10,8 @@ import { metrics } from "./server/routes/metrics.js";
 import { events }  from "./server/routes/events.js";
 import { plans }   from "./server/routes/plans.js";
 import { hue }     from "./server/routes/hue.js";
+import { imports } from "./server/routes/imports.js";
+import { startWatching } from "./server/ingest/watcher.js";
 
 // Secrets live in .env, read here and nowhere else. Missing file is fine —
 // routes that need a key say so themselves.
@@ -29,10 +31,12 @@ app.use("/api/metrics", metrics);
 app.use("/api/events",  events);
 app.use("/api/plans",   plans);
 app.use("/api/hue",     hue);
+app.use("/api/imports", imports);
 
 const PORT = process.env.PORT ?? 3001;
 
 app.listen(PORT, () => {
   migrate();   // create any missing tables at boot, so a fresh clone just works
   console.log(`Jarvis server running on http://localhost:${PORT}`);
+  startWatching();   // scans the inbox first, so a file dropped while off still lands
 });
