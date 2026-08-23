@@ -4,6 +4,7 @@ import { Icon } from "./ui/Icon.jsx";
 import { Bento, Tile, Stat, Track, Ring, Section, Row, Empty } from "./ui/kit.jsx";
 import { Frame, Readout, Hub, Legend, CommandLine } from "./ui/holo.jsx";
 import { HelmetFrame, BootOverlay, useBootSequence, useParallax } from "./ui/helmet.jsx";
+import { CommandPalette, useCommandKey } from "./ui/command.jsx";
 import "./App.css";
 
 applyTokens();   // mirror the palette onto :root before anything renders
@@ -1511,7 +1512,7 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
 }
 
 // ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
-function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
+function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, calendar, weather, jarvis, coffeeOn, oura, openPalette }) {
   const [cmd, setCmd] = useState("");
 
   const today     = new Date().toLocaleDateString();
@@ -1607,7 +1608,7 @@ function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, 
       }}>
         <span className="hud-num" style={{ color:C.gold, fontSize:14 }}>&gt;</span>
         <input value={cmd} onChange={e=>setCmd(e.target.value)}
-          placeholder="speak or type"
+          placeholder="speak, type, or press ⌘K"
           style={{ flex:1, background:"none", border:"none", outline:"none",
                    color:C.textBright, fontFamily:"inherit", fontSize:15, fontWeight:350 }} />
         <button type="button"
@@ -1678,20 +1679,35 @@ function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, 
 
         <div className="plate">
           <div className="hud-label" style={{ color:C.dimMid, marginBottom:16 }}>body</div>
-          <div style={{ display:"flex", gap:40 }}>
-            <div>
-              <span className="hud-num" style={{ ...TYPE.statSm, color:C.textBright }}>{lw ?? "—"}</span>
-              <span style={{ ...TYPE.small, color:C.dim }}> lb</span>
-              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 165–170</div>
+          {lw || lwa ? (
+            <div style={{ display:"flex", gap:40 }}>
+              <div>
+                <span className="hud-num" style={{ ...TYPE.statSm, color:C.textBright }}>{lw ?? "—"}</span>
+                <span style={{ ...TYPE.small, color:C.dim }}> lb</span>
+                <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 165–170</div>
+              </div>
+              <div>
+                <span className="hud-num" style={{ ...TYPE.statSm, color: lwa && lwa <= 84 ? C.gold : C.textBright }}>
+                  {lwa ?? "—"}
+                </span>
+                <span style={{ ...TYPE.small, color:C.dim }}> cm</span>
+                <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 81–84</div>
+              </div>
             </div>
+          ) : (
+            // An empty state should hand you the action, not report absence.
             <div>
-              <span className="hud-num" style={{ ...TYPE.statSm, color: lwa && lwa <= 84 ? C.gold : C.textBright }}>
-                {lwa ?? "—"}
-              </span>
-              <span style={{ ...TYPE.small, color:C.dim }}> cm</span>
-              <div style={{ ...TYPE.small, color:C.dim, marginTop:6 }}>target 81–84</div>
+              <div style={{ ...TYPE.body, color:C.dimMid, marginBottom:12 }}>
+                Nothing recorded yet.
+              </div>
+              <button className="hud-btn" onClick={openPalette}>
+                Log weight
+              </button>
+              <div className="hud-label" style={{ color:C.dim, marginTop:11 }}>
+                or press ⌘K and type “w 183”
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="plate">
@@ -4378,6 +4394,21 @@ export default function Jarvis() {
   const booting = useBootSequence(1600);
   const drift   = useParallax(3);   // content sits on the far plane, barely moving
 
+  // ── command palette ─────────────────────────────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useCommandKey(setPaletteOpen);
+
+  // Logging from the palette writes straight to the database, from any screen.
+  const runLog = useCallback(async ({ verb, value }) => {
+    try {
+      if (verb === "weight") { await addMeasurement({ weight: value }); notify(`Weight ${value} lb recorded`); }
+      if (verb === "waist")  { await addMeasurement({ waist: value });  notify(`Waist ${value} cm recorded`); }
+      if (verb === "sleep")  { await logSleep({ hours: value });        notify(`Sleep ${value} hrs recorded`); }
+    } catch (e) {
+      notify(e.message, "error");
+    }
+  }, [addMeasurement, logSleep, notify]);
+
   return (
     <div style={{
       minHeight:"100vh", color:C.text, position:"relative",
@@ -4400,7 +4431,7 @@ export default function Jarvis() {
         status={jarvisState === "idle" ? "standing by" : jarvisState}
         tone={jarvisState === "listening" ? C.red : jarvisState === "thinking" ? C.amber : C.gold}
         right={[timeStr()]}
-        left={[`${[spotify.connected, calendar.connected, oura.connected, hue.connected].filter(Boolean).length} of 4 systems online`]}
+        left={[`${[spotify.connected, calendar.connected, oura.connected, hue.connected].filter(Boolean).length} of 4 systems online`, "⌘K"]}
       />
 
       {notification && (
@@ -4417,6 +4448,16 @@ export default function Jarvis() {
           {notification.msg}
         </div>
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        tabs={TABS.map(([id, label]) => [id, label])}
+        currentTab={tab}
+        onNavigate={setTab}
+        onLog={runLog}
+        onAsk={q => { setTab("briefing"); jarvis.processCommand(q); }}
+      />
 
       {/* ── RAIL — navigation at the edge of vision ── */}
       <nav className="rail no-scrollbar">
@@ -4438,7 +4479,7 @@ export default function Jarvis() {
         }}>
         {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
-        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} workouts={workouts} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
+        {tab==="briefing"      && <BriefingTab openPalette={() => setPaletteOpen(true)} macros={macros} measurements={measurements} sleep={sleep} workouts={workouts} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
         {tab==="training"      && <TrainingTab workouts={workouts} logWorkout={logWorkout} clearDay={clearDay} error={workoutsError} notify={notify} />}
         {tab==="analytics"     && <AnalyticsTab macros={macros} macroHistory={macroHistory} measurements={measurements} sleep={sleep} />}

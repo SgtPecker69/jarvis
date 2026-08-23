@@ -295,3 +295,17 @@ input[type=number] { -moz-appearance: textfield; }
     padding: 116px 24px 128px !important;
   }
 }
+
+/* The palette locks into place rather than fading — same mechanical feel as
+   the frame. */
+@keyframes cmd-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Every interactive element gets a visible focus ring. Keyboard is now a
+   first-class way to drive this thing, so it has to be followable. */
+button:focus-visible, a:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+  outline: 1px solid var(--c-gold);
+  outline-offset: 2px;
+}
