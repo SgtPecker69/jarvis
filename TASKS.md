@@ -29,16 +29,14 @@ profile with location and habits) from 2026-05-22 until today. Closed and verifi
 - [x] 2026-08-22 — Gist confirmed **secret**, not public. The Vercel deploy was the only exposure
       path. The Gist still holds the old dead keys; deleting it needs a GitHub login.
 
-**Still to do in code — cleanup, no longer urgent:**
+**Code cleanup — DONE 2026-08-22 (evening):**
 
-- [ ] **Remove the auto-push.** `_scheduleAutoPush()` at `src/App.jsx:129` fires from
-      `useLocalStorage` (`src/App.jsx:149`) on every write to a `SYNC_KEYS` entry, POSTing the whole
-      config to `/api/config` after a 2s debounce — wrapped in `catch {}`, so it fails silently and
-      reports nothing. Until this is gone, entering a key in the deployed app republishes it.
-- [ ] Remove `jarvis_api_key`, `jarvis_groq_key`, `jarvis_eleven_key` from `SYNC_KEYS` in **both**
-      `src/App.jsx` and `api/config.js` — the lists are duplicated and already drifted.
-- [ ] Retire `api/config.js` entirely once local-first lands. Secrets move to a local `.env` read
-      only by the server; add `.env.example` with names and no values.
+- [x] Auto-push removed. `_scheduleAutoPush()` and the whole `SYNC_KEYS` list are gone from
+      `src/App.jsx`, so no write can republish a key.
+- [x] `useCloudSync` and the Gist card in Integrations removed with it.
+- [x] `api/config.js` deleted. `.env.example` added with names and no values.
+- [x] `server.js` reads `ANTHROPIC_API_KEY` from `.env` first, falling back to the old
+      `X-API-Key` header so nothing breaks before the key is moved.
 
 ## Task 2: the SQLite data layer — DONE 2026-08-22
 
@@ -93,15 +91,36 @@ The Body tab is the first thing in the app that reads and writes SQLite instead 
 - [x] `PORT` now overridable, so a test server can run beside the dev one.
 - [x] Verified end to end in the browser: log → `POST` 200 → row in SQLite → re-read on mount.
 
-**Next, same pattern:** Sleep tab (`sleep_hours`), Training tab (workouts → `events`), macro
-history. Each is a copy of `useMeasurements`.
+## Task 3c: the rest of the manual logging — DONE 2026-08-22
+
+Every view that records something by hand now writes to SQLite. `useMetrics` is the shared path;
+each view hook just declares its metrics.
+
+- [x] `useMetrics(specs)` — one read/write path, one place that knows the API. `useMeasurements`
+      rebuilt on it.
+- [x] **Sleep** → `sleep_hours` plus `bedtime_min`. Bedtime is stored as minutes past midnight
+      because a number is chartable and "23:30" isn't; both rows share one timestamp so they fold
+      back into one night on read. Verified: 7.5h + 23:30 → 1410, renders back correctly.
+- [x] **Training** → `events` with `kind='workout'`, sets in `payload`. Needed
+      `GET`/`POST`/`DELETE /api/events`. Verified: log → PR badge and volume compute from the
+      database → Clear Today deletes the row.
+- [x] **Macro history** → `macro_cal` / `macro_protein` / `macro_carbs` / `macro_fat`, written at
+      the day boundary. The `UNIQUE(source, metric, ts)` constraint means re-snapshotting a day
+      corrects it instead of duplicating. A failed snapshot now notifies instead of vanishing.
+
+`jarvis_measurements`, `jarvis_sleep`, `jarvis_workouts` and `jarvis_macro_history` are gone from
+localStorage. What's left there is settings, tokens and UI state.
+
+**Still on localStorage, deliberately:** today's running macro total (`jarvis_macros`) resets daily
+and is scratch. Worth moving when the Macros tab gets rebuilt — the day's row could be upserted on
+every change instead of snapshotted at midnight.
 
 ## Cleanup carried forward
 
 - Gist: **no action needed.** It's secret, every key in it is dead, and `/api/config` can no longer
   write to it (`GITHUB_PAT` deleted from Vercel in task 1). Inert. Delete it only if you want to.
-- [ ] Remove `_scheduleAutoPush()` (`src/App.jsx:129`) — see task 1. Now doubly dead: it pushes to
-      an endpoint that returns `not-configured`, silently, on every write.
+- [ ] Move the Anthropic / Groq / ElevenLabs keys out of the browser and into `.env`. The server
+      already prefers `.env`; the browser fields still work, so this is a migration, not a fix.
 
 ## Next — Task 4: expand server.js into the real local API
 

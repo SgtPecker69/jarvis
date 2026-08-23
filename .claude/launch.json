@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "jarvis",
+      "name": "jarvis-api",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["run", "server"],
+      "port": 3001
+    },
+    {
+      "name": "jarvis-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite"],
       "port": 5173
     }
   ]

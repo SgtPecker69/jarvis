@@ -104,48 +104,13 @@ async function genChallenge(v) {
   return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
 }
 
-// ─── CLOUD SYNC KEYS ───────────────────────────────────────────────────────────
-const SYNC_KEYS = [
-  "jarvis_api_key", "jarvis_groq_key", "jarvis_eleven_key", "jarvis_voice_id",
-  "jarvis_spotify_cid",
-  "jarvis_gcal_cid",
-  "jarvis_oura_token",
-  "jarvis_webhooks",
-  "jarvis_memories", "jarvis_memory_file", "jarvis_memory_updated",
-  "jarvis_continuous_mode",
-  "jarvis_crypto_enabled",
-  "jarvis_hue",
-  "jarvis_measurements",
-  "jarvis_sleep",
-  "jarvis_macro_history",
-  "jarvis_macro_date",
-  "jarvis_workouts",
-  "jarvis_briefing_date",
-];
-
 // ─── LOCAL STORAGE HOOK ────────────────────────────────────────────────────────
-// Debounced auto-push timer shared across all useLocalStorage instances
-let _autoPushTimer = null;
-function _scheduleAutoPush() {
-  clearTimeout(_autoPushTimer);
-  _autoPushTimer = setTimeout(async () => {
-    try {
-      const config = {};
-      for (const key of SYNC_KEYS) {
-        const raw = localStorage.getItem(key);
-        if (raw !== null) {
-          try { config[key] = JSON.parse(raw); } catch { config[key] = raw; }
-        }
-      }
-      await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-    } catch {}
-  }, 2000);
-}
-
+// Settings and tokens only. Anything with history lives in SQLite — see the
+// useMetrics hooks further down.
+//
+// This used to auto-push every write to a GitHub Gist via /api/config, which is
+// how the API keys ended up publicly readable. That whole path is gone: the Gist
+// sync is retired, the endpoint is deleted, and secrets belong in .env now.
 function useLocalStorage(key, def) {
   const [val, setVal] = useState(() => {
     try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : def; }
@@ -153,88 +118,9 @@ function useLocalStorage(key, def) {
   });
   const set = useCallback(v => {
     setVal(v);
-    try {
-      localStorage.setItem(key, JSON.stringify(v));
-      if (SYNC_KEYS.includes(key)) _scheduleAutoPush();
-    } catch {}
+    try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
   }, [key]);
   return [val, set];
-}
-
-// ─── CLOUD SYNC ────────────────────────────────────────────────────────────────
-function useCloudSync() {
-  const [syncing,    setSyncing]    = useState(false);
-  const [syncStatus, setSyncStatus] = useState(null); // null | "ok" | "error" | "not-configured"
-  const [lastSync,   setLastSync]   = useLocalStorage("jarvis_last_sync", null);
-
-  // Pull config from cloud and apply to localStorage, then reload
-  const pull = useCallback(async (silent = false) => {
-    setSyncing(true);
-    try {
-      const r    = await fetch("/api/config");
-      const data = await r.json();
-      if (!r.ok) {
-        setSyncStatus(data.error === "not-configured" ? "not-configured" : "error");
-        setSyncing(false);
-        return false;
-      }
-      if (Object.keys(data).length === 0) {
-        setSyncStatus("ok");
-        setSyncing(false);
-        if (!silent) alert("Cloud config is empty — push your current settings first.");
-        return false;
-      }
-      for (const [key, value] of Object.entries(data)) {
-        if (SYNC_KEYS.includes(key)) localStorage.setItem(key, JSON.stringify(value));
-      }
-      setLastSync(new Date().toISOString());
-      setSyncStatus("ok");
-      setSyncing(false);
-      if (!silent) window.location.reload();
-      return true;
-    } catch {
-      setSyncStatus("error");
-      setSyncing(false);
-      return false;
-    }
-  }, [setLastSync]);
-
-  // Push current localStorage to cloud
-  const push = useCallback(async () => {
-    setSyncing(true);
-    try {
-      const config = {};
-      for (const key of SYNC_KEYS) {
-        const raw = localStorage.getItem(key);
-        if (raw !== null) {
-          try { config[key] = JSON.parse(raw); } catch { config[key] = raw; }
-        }
-      }
-      const r    = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        setSyncStatus(data.error === "not-configured" ? "not-configured" : "error");
-      } else {
-        setLastSync(new Date().toISOString());
-        setSyncStatus("ok");
-      }
-    } catch {
-      setSyncStatus("error");
-    }
-    setSyncing(false);
-  }, [setLastSync]);
-
-  // On load, always pull from cloud and apply silently (reload only if local was empty)
-  useEffect(() => {
-    const hasConfig = SYNC_KEYS.some(k => localStorage.getItem(k) !== null);
-    pull(true).then(pulled => { if (pulled && !hasConfig) window.location.reload(); });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return { syncing, syncStatus, lastSync, pull, push };
 }
 
 // ─── SPOTIFY HOOK ──────────────────────────────────────────────────────────────
@@ -2087,11 +1973,12 @@ const EXERCISES = [
   "Hip Thrust","Calf Raise","Plank",
 ];
 
-function TrainingTab({ workouts, setWorkouts, notify }) {
+function TrainingTab({ workouts, logWorkout, clearDay, error, notify }) {
   const [view,     setView]     = useState("log");
   const [exercise, setExercise] = useState("");
   const [sets,     setSets]     = useState([{ weight:"", reps:"" }]);
   const [listening,setListening]= useState(false);
+  const [saving,   setSaving]   = useState(false);
   const recogRef = useRef(null);
 
   const today        = new Date().toLocaleDateString();
@@ -2102,25 +1989,33 @@ function TrainingTab({ workouts, setWorkouts, notify }) {
   const removeSet = (i) => setSets(p => p.filter((_,j) => j !== i));
   const updSet    = (i, f, v) => setSets(p => p.map((s,j) => j===i ? {...s,[f]:v} : s));
 
-  const logSets = () => {
+  const logSets = async () => {
     if (!exercise.trim()) { notify("Enter an exercise name", "error"); return; }
     const valid = sets.filter(s => s.weight && s.reps);
     if (!valid.length) { notify("Enter at least one complete set", "error"); return; }
-    const entry = {
-      id: Date.now().toString(),
-      date: today,
-      exercise: exercise.trim(),
-      sets: valid.map(s => ({ weight: parseFloat(s.weight), reps: parseInt(s.reps) })),
-      ts: new Date().toISOString(),
-    };
-    setWorkouts(prev => [...prev, entry].slice(-500));
-    setSets([{ weight:"", reps:"" }]);
-    notify(`${exercise.trim()} logged ✓`, "success");
+
+    setSaving(true);
+    try {
+      await logWorkout({
+        exercise: exercise.trim(),
+        sets: valid.map(s => ({ weight: parseFloat(s.weight), reps: parseInt(s.reps) })),
+      });
+      setSets([{ weight:"", reps:"" }]);
+      notify(`${exercise.trim()} logged ✓`, "success");
+    } catch (e) {
+      notify(e.message, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const clearToday = () => {
-    setWorkouts(prev => prev.filter(w => w.date !== today));
-    notify("Today's workout cleared", "success");
+  const clearToday = async () => {
+    try {
+      await clearDay(today);
+      notify("Today's workout cleared", "success");
+    } catch (e) {
+      notify(e.message, "error");
+    }
   };
 
   // Voice logging: "Bench Press 225 for 8"
@@ -2235,8 +2130,12 @@ function TrainingTab({ workouts, setWorkouts, notify }) {
 
             <div style={{ display:"flex", gap:8, marginTop:6 }}>
               <HUDBtn onClick={addSet} style={{ flex:1 }}>+ Set</HUDBtn>
-              <HUDBtn variant="primary" onClick={logSets} style={{ flex:2 }}>Log Exercise</HUDBtn>
+              <HUDBtn variant="primary" onClick={logSets} disabled={saving} style={{ flex:2 }}>
+                {saving ? "Saving…" : "Log Exercise"}
+              </HUDBtn>
             </div>
+
+            {error && <div style={{ marginTop:10, fontSize:12, color:C.orange }}>{error}</div>}
 
             {/* PR badge */}
             {exercise.trim() && getPR(exercise.trim()) && (
@@ -3307,18 +3206,27 @@ function BodyTab({ measurements, addMeasurement, error, notify }) {
 }
 
 // ─── SLEEP TAB ────────────────────────────────────────────────────────────────
-function SleepTab({ sleep, setSleep, notify, oura }) {
+function SleepTab({ sleep, logSleep, error, notify, oura }) {
   const [inp,     setInp]     = useState({ hours:"", bedtime:"" });
   const [patInp,  setPatInp]  = useState("");
+  const [saving,  setSaving]  = useState(false);
   const avgS = sleep.length ? (sleep.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sleep.length,7)).toFixed(1) : null;
   const debt = avgS ? Math.max(0,(8-parseFloat(avgS))*7).toFixed(1) : null;
 
-  const log = () => {
+  const log = async () => {
     const h = parseFloat(inp.hours);
     if (!h) { notify("Enter sleep hours", "error"); return; }
-    setSleep([...sleep, { date:new Date().toLocaleDateString(), hours:h, bedtime:inp.bedtime }].slice(-30));
-    setInp({ hours:"", bedtime:"" });
-    notify("Sleep logged", "success");
+
+    setSaving(true);
+    try {
+      await logSleep({ hours: h, bedtime: inp.bedtime });
+      setInp({ hours:"", bedtime:"" });
+      notify("Sleep logged ✓", "success");
+    } catch (e) {
+      notify(e.message, "error");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Oura derived metrics ──
@@ -3426,7 +3334,10 @@ function SleepTab({ sleep, setSleep, notify, oura }) {
           <HUDInput label="Bedtime" type="time"
             value={inp.bedtime} onChange={e=>setInp({...inp,bedtime:e.target.value})} style={{ marginBottom:0 }} />
         </div>
-        <HUDBtn variant="primary" onClick={log}>Log Sleep</HUDBtn>
+        <HUDBtn variant="primary" onClick={log} disabled={saving}>
+          {saving ? "Saving…" : "Log Sleep"}
+        </HUDBtn>
+        {error && <div style={{ marginTop:10, fontSize:12, color:C.orange }}>{error}</div>}
       </HUDCard>
 
       <HUDCard title="Sleep Overview">
@@ -3473,7 +3384,7 @@ function SleepTab({ sleep, setSleep, notify, oura }) {
 }
 
 // ─── INTEGRATIONS TAB ─────────────────────────────────────────────────────────
-function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSync }) {
+function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
   const [open,    setOpen]    = useState({});
   const [newWH,   setNewWH]   = useState({ name:"", url:"", triggers:"", description:"" });
   const [adding,  setAdding]  = useState(false);
@@ -3530,48 +3441,6 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks, cloudSyn
   return (
     <>
       <div style={{ fontSize:10, letterSpacing:"0.15em", color:C.dim, marginBottom:16 }}>◆ INTEGRATIONS HUB</div>
-
-      {/* ── CLOUD SYNC ── */}
-      <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, fontWeight:600 }}>CLOUD SYNC</div>
-      {cloudSync && (
-        <IntCard id="cloud" icon="☁️" title="GitHub Gist Sync"
-          status={
-            cloudSync.syncStatus === "not-configured" ? "Not configured — see setup below" :
-            cloudSync.syncStatus === "error"          ? "Sync error — check Vercel env vars" :
-            cloudSync.lastSync                        ? `Last synced ${new Date(cloudSync.lastSync).toLocaleString()}` :
-            "Never synced — push your settings to get started"
-          }
-          statusOk={cloudSync.syncStatus === "ok" && !!cloudSync.lastSync}>
-          <div style={{ fontSize:12, color:C.dim, marginBottom:14, lineHeight:1.8 }}>
-            Saves all your API keys and settings to a private GitHub Gist.
-            Open Jarvis on any device — it auto-pulls your config on first load.<br/><br/>
-            <span style={{ color:C.textBright, fontWeight:600 }}>One-time setup:</span><br/>
-            1. Go to <span style={{ color:C.cyan }}>gist.github.com</span> → New gist → set filename to{" "}
-            <span style={{ color:C.cyan }}>jarvis-config.json</span>, content <span style={{ color:C.cyan }}>{"{}"}</span>, set to <span style={{ color:C.cyan }}>Secret</span><br/>
-            2. Go to <span style={{ color:C.cyan }}>github.com/settings/tokens</span> → Generate classic token with <span style={{ color:C.cyan }}>gist</span> scope<br/>
-            3. In Vercel → your project → Settings → Environment Variables, add:<br/>
-            &nbsp;&nbsp;• <span style={{ color:C.cyan }}>GITHUB_PAT</span> = your token<br/>
-            &nbsp;&nbsp;• <span style={{ color:C.cyan }}>GITHUB_GIST_ID</span> = the ID from the Gist URL (the long hash)
-          </div>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            <HUDBtn variant="primary" onClick={cloudSync.push} disabled={cloudSync.syncing}>
-              {cloudSync.syncing ? "Syncing…" : "⬆ Push to Cloud"}
-            </HUDBtn>
-            <HUDBtn onClick={() => {
-              if (window.confirm("Pull from cloud? This will overwrite your local settings and reload the page.")) {
-                cloudSync.pull(false);
-              }
-            }} disabled={cloudSync.syncing}>
-              {cloudSync.syncing ? "Loading…" : "⬇ Pull from Cloud"}
-            </HUDBtn>
-          </div>
-          {cloudSync.syncStatus === "error" && (
-            <div style={{ fontSize:11, color:C.red, marginTop:10 }}>
-              ⚠ Could not reach sync endpoint. Make sure GITHUB_PAT and GITHUB_GIST_ID are set in Vercel and the project has been redeployed.
-            </div>
-          )}
-        </IntCard>
-      )}
 
       {/* ── AI CORE ── */}
       <div style={{ fontSize:10, letterSpacing:"0.12em", color:C.cyan, marginBottom:8, fontWeight:600 }}>AI CORE</div>
@@ -4144,62 +4013,209 @@ function PlansTab({ apiKey }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-// ─── MEASUREMENTS — SQLite, not localStorage ──────────────────────────────────
-// The first view to read and write through the local API. Same shape the UI
-// already expects — { weight: [{date, val}], waist: [{date, val}] } — so nothing
-// downstream cares that the data now outlives the browser cache.
-function useMeasurements() {
-  const [measurements, setMeasurements] = useState({ weight:[], waist:[] });
-  const [error,        setError]        = useState(null);
+// ─── SQLITE-BACKED STATE ──────────────────────────────────────────────────────
+// Everything logged by hand now lives in the database, not localStorage. One
+// hook knows how to talk to /api/metrics; the view hooks below just declare
+// which metrics they need and hand back the shape the views already expected.
+
+const SERVER_DOWN = "Can't reach the Jarvis server. Is `npm run dev` running?";
+
+function useMetrics(specs) {
+  const [series, setSeries] = useState(() => Object.fromEntries(specs.map(s => [s.key, []])));
+  const [error,  setError]  = useState(null);
+  const specsRef = useRef(specs);   // callers define these at module scope; never changes
 
   const load = useCallback(async () => {
     try {
-      const [w, wa] = await Promise.all([
-        fetch("/api/metrics?metric=weight_lb&source=manual").then(r => r.json()),
-        fetch("/api/metrics?metric=waist_cm&source=manual").then(r => r.json()),
-      ]);
-      const series = d => (d.rows ?? []).map(r => ({
-        date: new Date(r.ts).toLocaleDateString(), val: r.value, ts: r.ts,
-      }));
-      setMeasurements({ weight: series(w), waist: series(wa) });
+      const results = await Promise.all(specsRef.current.map(s =>
+        fetch(`/api/metrics?metric=${s.metric}&source=manual`).then(r => r.json())
+      ));
+      setSeries(Object.fromEntries(specsRef.current.map((s, i) => [
+        s.key,
+        (results[i].rows ?? []).map(r => ({
+          date: new Date(r.ts).toLocaleDateString(), val: r.value, ts: r.ts,
+        })),
+      ])));
       setError(null);
     } catch {
-      // Named failure, not silence — the whole app is useless if the server is down.
-      setError("Can't reach the Jarvis server. Is `npm run dev` running?");
+      setError(SERVER_DOWN);   // named failure, not silence
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const addMeasurement = useCallback(async ({ weight, waist }) => {
-    const ts   = new Date().toISOString();
-    const rows = [];
-    if (weight) rows.push({ metric:"weight_lb", value:weight, unit:"lb" });
-    if (waist)  rows.push({ metric:"waist_cm",  value:waist,  unit:"cm" });
-
-    for (const row of rows) {
+  // One timestamp for everything written together, so a night's hours and its
+  // bedtime land on the same row when read back.
+  const add = useCallback(async (values, ts = new Date().toISOString()) => {
+    for (const s of specsRef.current) {
+      if (values[s.key] == null) continue;
       const res = await fetch("/api/metrics", {
         method:  "POST",
         headers: { "Content-Type":"application/json" },
-        body:    JSON.stringify({ source:"manual", ts, ...row }),
+        body:    JSON.stringify({ source:"manual", metric:s.metric, value:values[s.key], unit:s.unit, ts }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
     }
     await load();
   }, [load]);
 
-  return { measurements, addMeasurement, error };
+  return { series, add, error, reload: load };
+}
+
+// ── body: weight paired with waist ──
+const BODY_METRICS = [
+  { key:"weight", metric:"weight_lb", unit:"lb" },
+  { key:"waist",  metric:"waist_cm",  unit:"cm" },
+];
+
+function useMeasurements() {
+  const { series, add, error } = useMetrics(BODY_METRICS);
+  return { measurements: series, addMeasurement: add, error };
+}
+
+// ── macro history ──
+// One row per day, written when the day rolls over. The UNIQUE(source, metric, ts)
+// constraint means re-snapshotting the same day corrects it instead of duplicating.
+const MACRO_METRICS = [
+  { key:"cal",     metric:"macro_cal",     unit:"kcal" },
+  { key:"protein", metric:"macro_protein", unit:"g"    },
+  { key:"carbs",   metric:"macro_carbs",   unit:"g"    },
+  { key:"fat",     metric:"macro_fat",     unit:"g"    },
+];
+
+// "8/22/2026" → ISO at noon UTC, so a timezone shift can't move it a day.
+function localDateToISO(date) {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(date ?? "");
+  if (!m) return new Date(date).toISOString();
+  return new Date(Date.UTC(+m[3], +m[1] - 1, +m[2], 12)).toISOString();
+}
+
+function useMacroHistory() {
+  const { series, add, error } = useMetrics(MACRO_METRICS);
+
+  // Fold the four series into the [{ date, cal, protein, carbs, fat }] the
+  // Analytics view already reads.
+  const byTs = new Map();
+  for (const spec of MACRO_METRICS) {
+    for (const row of series[spec.key]) {
+      if (!byTs.has(row.ts)) byTs.set(row.ts, { date: row.date, ts: row.ts });
+      byTs.get(row.ts)[spec.key] = row.val;
+    }
+  }
+  const macroHistory = [...byTs.values()]
+    .sort((a, b) => a.ts.localeCompare(b.ts))
+    .map(d => ({ cal:0, protein:0, carbs:0, fat:0, ...d }));
+
+  const snapshotMacros = useCallback(
+    (date, macros) => add({
+      cal:     Math.round(macros.cal),
+      protein: Math.round(macros.protein),
+      carbs:   Math.round(macros.carbs),
+      fat:     Math.round(macros.fat),
+    }, localDateToISO(date)),
+    [add]
+  );
+
+  return { macroHistory, snapshotMacros, error };
+}
+
+// ── workouts ──
+// These are events, not metrics: an exercise with sets, not a single number.
+// The views expect [{ id, date, exercise, sets, ts }], so that's what comes back.
+function useWorkouts() {
+  const [workouts, setWorkouts] = useState([]);
+  const [error,    setError]    = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const { rows } = await fetch("/api/events?kind=workout").then(r => r.json());
+      setWorkouts((rows ?? []).map(r => ({
+        id:       r.id,
+        date:     new Date(r.start_ts).toLocaleDateString(),
+        exercise: r.title,
+        sets:     r.payload?.sets ?? [],
+        ts:       r.start_ts,
+      })));
+      setError(null);
+    } catch {
+      setError(SERVER_DOWN);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const logWorkout = useCallback(async ({ exercise, sets }) => {
+    const ts  = new Date().toISOString();
+    const res = await fetch("/api/events", {
+      method:  "POST",
+      headers: { "Content-Type":"application/json" },
+      body:    JSON.stringify({
+        source:"manual", kind:"workout", title:exercise, start_ts:ts,
+        external_id:`workout:${ts}:${exercise}`, payload:{ sets },
+      }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Save failed");
+    await load();
+  }, [load]);
+
+  const clearDay = useCallback(async (date) => {
+    const doomed = workouts.filter(w => w.date === date);
+    for (const w of doomed) {
+      const res = await fetch(`/api/events/${w.id}`, { method:"DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Delete failed");
+    }
+    await load();
+  }, [workouts, load]);
+
+  return { workouts, logWorkout, clearDay, error };
+}
+
+// ── sleep ──
+// Hours is a real metric so Oura and Whoop can write the same one later and be
+// compared against it. Bedtime is stored as minutes past midnight for the same
+// reason — a number is chartable, "23:30" isn't.
+const SLEEP_METRICS = [
+  { key:"hours",   metric:"sleep_hours", unit:"h"   },
+  { key:"bedtime", metric:"bedtime_min", unit:"min" },
+];
+
+const toMinutes = (hhmm) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm ?? "");
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+};
+const toClock = (mins) =>
+  mins == null ? "" : `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+function useSleepLog() {
+  const { series, add, error } = useMetrics(SLEEP_METRICS);
+
+  // The views want one row per night — [{ date, hours, bedtime }] — so fold the
+  // two series back together on the timestamp they were written with.
+  const bedtimes = new Map(series.bedtime.map(b => [b.ts, b.val]));
+  const sleep = series.hours.map(h => ({
+    date:    h.date,
+    hours:   h.val,
+    bedtime: toClock(bedtimes.get(h.ts) ?? null),
+    ts:      h.ts,
+  }));
+
+  const logSleep = useCallback(
+    ({ hours, bedtime }) => add({ hours, bedtime: toMinutes(bedtime) }),
+    [add]
+  );
+
+  return { sleep, logSleep, error };
 }
 
 export default function Jarvis() {
   const [tab,           setTab]          = useState("briefing");
   const [macros,        setMacros]       = useLocalStorage("jarvis_macros",       { cal:0, protein:0, carbs:0, fat:0 });
-  const [macroHistory,  setMacroHistory] = useLocalStorage("jarvis_macro_history", []);
+  const { macroHistory, snapshotMacros, error: macroError } = useMacroHistory();
   const [macroDate,     setMacroDate]    = useLocalStorage("jarvis_macro_date",    "");
-  const [workouts,      setWorkouts]     = useLocalStorage("jarvis_workouts",      []);
+  const { workouts, logWorkout, clearDay, error: workoutsError } = useWorkouts();
   const [briefingDate,  setBriefingDate] = useLocalStorage("jarvis_briefing_date", "");
   const { measurements, addMeasurement, error: measurementsError } = useMeasurements();
-  const [sleep,         setSleep]        = useLocalStorage("jarvis_sleep",        []);
+  const { sleep, logSleep, error: sleepError } = useSleepLog();
   const [hue,           setHue]          = useLocalStorage("jarvis_hue",          { connected:false, bridgeIp:"", username:"", lights:[] });
   const [coffeeOn,      setCoffeeOn]     = useLocalStorage("jarvis_coffee",       false);
   const [sceneLoading,  setSceneLoading] = useState(null);
@@ -4211,7 +4227,6 @@ export default function Jarvis() {
   const webhooks   = useWebhooks();
   const crypto     = useCrypto();
   const oura       = useOura();
-  const cloudSync  = useCloudSync();
   const speakRef   = useRef(null); // always-current speak fn for handlers defined before jarvis
 
   const notify = useCallback((msg, type = "success") => {
@@ -4311,15 +4326,11 @@ export default function Jarvis() {
   useEffect(() => {
     const today = new Date().toLocaleDateString();
     if (macroDate && macroDate !== today) {
-      // New day detected — save yesterday's macros to history and reset
+      // New day detected — write yesterday's macros to the database and reset.
+      // If the write fails the day is lost, so say so rather than failing quietly.
       if (macros.cal > 0 || macros.protein > 0) {
-        setMacroHistory(prev => [...prev, {
-          date:    macroDate,
-          cal:     Math.round(macros.cal),
-          protein: Math.round(macros.protein),
-          carbs:   Math.round(macros.carbs),
-          fat:     Math.round(macros.fat),
-        }].slice(-90));
+        snapshotMacros(macroDate, macros)
+          .catch(() => notify(`Couldn't save ${macroDate}'s macros to the database`, "error"));
       }
       setMacros({ cal:0, protein:0, carbs:0, fat:0 });
     }
@@ -4472,13 +4483,13 @@ export default function Jarvis() {
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
-        {tab==="training"      && <TrainingTab workouts={workouts} setWorkouts={setWorkouts} notify={notify} />}
+        {tab==="training"      && <TrainingTab workouts={workouts} logWorkout={logWorkout} clearDay={clearDay} error={workoutsError} notify={notify} />}
         {tab==="analytics"     && <AnalyticsTab macros={macros} macroHistory={macroHistory} measurements={measurements} sleep={sleep} />}
         {tab==="environment"   && <EnvironmentTab hue={hue} setHue={setHue} coffeeOn={coffeeOn} setCoffeeOn={setCoffeeOn} sceneLoading={sceneLoading} applyScene={applyScene} notify={notify} />}
         {tab==="recipes"       && <RecipesTab />}
         {tab==="body"          && <BodyTab measurements={measurements} addMeasurement={addMeasurement} error={measurementsError} notify={notify} />}
-        {tab==="sleep"         && <SleepTab sleep={sleep} setSleep={setSleep} notify={notify} oura={oura} />}
-        {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} cloudSync={cloudSync} />}
+        {tab==="sleep"         && <SleepTab sleep={sleep} logSleep={logSleep} error={sleepError} notify={notify} oura={oura} />}
+        {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
         {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
       </div>
 

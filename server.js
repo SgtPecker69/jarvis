@@ -7,6 +7,10 @@ import { readFileSync, existsSync } from "fs";
 // The Jarvis database — distinct from the read-only iMessage one opened below.
 import { db as jarvisDb, migrate, putMetric } from "./db/index.js";
 
+// Secrets live in .env, read here and nowhere else. Missing file is fine —
+// routes that need a key say so themselves.
+try { process.loadEnvFile(new URL(".env", import.meta.url)); } catch {}
+
 const app = express();
 app.use(express.json());
 
@@ -77,8 +81,12 @@ function formatConvosForClaude(convos) {
 }
 
 app.post("/api/plans/scan", async (req, res) => {
-  const apiKey = req.headers["x-api-key"];
-  if (!apiKey) return res.status(400).json({ error: "Missing X-API-Key header" });
+  // .env first — the point of local-first is that the browser never holds a key.
+  // The header is the old path, kept working until the key moves to .env.
+  const apiKey = process.env.ANTHROPIC_API_KEY || req.headers["x-api-key"];
+  if (!apiKey) {
+    return res.status(400).json({ error: "No Anthropic key. Set ANTHROPIC_API_KEY in .env" });
+  }
 
   const days = parseInt(req.query.days) || 90;
 
@@ -179,6 +187,61 @@ app.post("/api/metrics", (req, res) => {
   try {
     putMetric({ source, metric, value, unit, ts: ts ?? new Date().toISOString() });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── events ───────────────────────────────────────────────────────────────────
+// Things that happened at a time, with detail: workouts now, calendar and
+// transactions later. `payload` carries whatever the source cares about.
+
+app.get("/api/events", (req, res) => {
+  const { kind, limit = 500 } = req.query;
+  if (!kind) return res.status(400).json({ error: "kind is required" });
+
+  try {
+    const rows = jarvisDb.prepare(
+      `SELECT id, source, kind, title, start_ts, external_id, payload FROM events
+       WHERE kind = ? ORDER BY start_ts DESC LIMIT ?`
+    ).all(kind, Number(limit));
+
+    res.json({
+      kind,
+      rows: rows.reverse().map(r => ({ ...r, payload: r.payload ? JSON.parse(r.payload) : null })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/events", (req, res) => {
+  const { source = "manual", kind, title, start_ts, external_id, payload = null } = req.body ?? {};
+  if (!kind || !title) return res.status(400).json({ error: "kind and title are required" });
+
+  try {
+    jarvisDb.prepare(`
+      INSERT INTO events (source, kind, title, start_ts, external_id, payload)
+      VALUES (@source, @kind, @title, @start_ts, @external_id, @payload)
+      ON CONFLICT (source, external_id) DO UPDATE SET
+        title = excluded.title, start_ts = excluded.start_ts, payload = excluded.payload
+    `).run({
+      source, kind, title,
+      start_ts:    start_ts ?? new Date().toISOString(),
+      external_id: external_id ?? `${kind}:${Date.now()}`,
+      payload:     payload ? JSON.stringify(payload) : null,
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/events/:id", (req, res) => {
+  try {
+    const { changes } = jarvisDb.prepare(`DELETE FROM events WHERE id = ?`).run(req.params.id);
+    if (!changes) return res.status(404).json({ error: "no such event" });
+    res.json({ ok: true, deleted: changes });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
