@@ -98,7 +98,8 @@ history. Each is a copy of `useMeasurements`.
 
 ## Cleanup carried forward
 
-- [ ] **Delete the Gist.** It still holds the rotated-out API keys. Needs a GitHub login.
+- Gist: **no action needed.** It's secret, every key in it is dead, and `/api/config` can no longer
+  write to it (`GITHUB_PAT` deleted from Vercel in task 1). Inert. Delete it only if you want to.
 - [ ] Remove `_scheduleAutoPush()` (`src/App.jsx:129`) — see task 1. Now doubly dead: it pushes to
       an endpoint that returns `not-configured`, silently, on every write.
 
