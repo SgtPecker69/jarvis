@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { C, RADIUS, TYPE, MOTION, applyTokens } from "./styles/tokens.js";
 import { Icon } from "./ui/Icon.jsx";
 import { Bento, Tile, Stat, Track, Ring, Section, Row, Empty } from "./ui/kit.jsx";
+import { Frame, Readout, Hub, Legend, CommandLine } from "./ui/holo.jsx";
 import "./App.css";
 
 applyTokens();   // mirror the palette onto :root before anything renders
@@ -1534,215 +1535,185 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
     setCmd("");
   };
 
-  const stateColor = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[voiceState];
-  const idleLabel  = jarvis.continuousMode ? "Listening" : "Tap to speak";
-  const stateLabel = { idle:idleLabel, listening:"Listening", thinking:"Thinking", speaking:"Responding" }[voiceState];
-
-  const hour = new Date().getHours();
-  const greeting = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const stateColor = { idle:C.cyan, listening:C.red, thinking:C.amber, speaking:C.green }[voiceState];
+  const stateLabel = { idle:"standing by", listening:"receiving", thinking:"processing", speaking:"responding" }[voiceState];
 
   const oR  = oura?.data?.readiness?.slice(-1)[0];
   const oSl = oura?.data?.dailySleep?.slice(-1)[0];
   const oSe = oura?.data?.sessions?.slice(-1)[0];
 
+  // The hub carries the day's four headline figures as concentric arcs.
+  const rings = [
+    { pct: macros.cal/TARGET_CAL*100,         tone: C.cyan,   ticks: 13 },
+    { pct: macros.protein/TARGET_PROTEIN*100, tone: C.green              },
+    { pct: oR?.score ?? (avgS ? avgS/8*100 : 0), tone: C.violet          },
+    { pct: lwa ? Math.max(0, Math.min(100,(1-(lwa-83)/10)*100)) : 0, tone: C.amber },
+  ];
+
   return (
-    <>
-      {/* ── Greeting. No card: the page starts with a voice, not a container. ── */}
-      <div style={{ margin:"6px 2px 24px" }}>
-        <div style={{ display:"flex", alignItems:"flex-end", gap:16, flexWrap:"wrap" }}>
-          <div>
-            <div style={{ ...TYPE.display, color:C.textBright }}>{greeting}</div>
-            <div style={{ ...TYPE.body, color:C.dimMid, marginTop:8 }}>
-              {todayStr()} · <span className="data-num">{time}</span>
-            </div>
-          </div>
-          <div style={{ marginLeft:"auto", display:"flex", gap:7, flexWrap:"wrap" }}>
-            <span className="chip" style={{
-              background:`${training ? C.orange : C.violet}18`,
-              color: training ? C.orange : C.violet,
-              border:`1px solid ${training ? C.orange : C.violet}30`,
-            }}>
-              <Icon name={training ? "bolt" : "moon"} size={13} />
-              {training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
-            </span>
-            {weather.data && (
-              <span className="chip" style={{
-                background:`${C.blue}14`, color:C.blue, border:`1px solid ${C.blue}28`,
-              }}>
-                <span className="data-num">{Math.round(weather.data.temperature_2m)}°</span>
-                {wxDesc(weather.data.weather_code)}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {ritual && (
-          <div style={{
-            ...TYPE.small, color:C.amber, marginTop:16,
-            display:"inline-flex", alignItems:"center", gap:8,
-            padding:"9px 15px", borderRadius:RADIUS.pill,
-            background:`${C.amber}12`, border:`1px solid ${C.amber}26`,
-          }}>
-            <Icon name="spark" size={14} />
-            {ritual}
-          </div>
-        )}
-      </div>
-
-      {/* ── Voice. The one thing on the page allowed to be big and empty. ── */}
-      <div className="tile" style={{
-        position:"relative", borderRadius:RADIUS.xl, marginBottom:12,
-        padding:"34px 24px 26px", textAlign:"center", overflow:"hidden",
-        background:`
-          radial-gradient(ellipse 60% 70% at 50% 30%, ${stateColor}1A 0%, transparent 68%),
-          linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%)`,
-        border:`1px solid ${stateColor}2E`,
-        transition:`background 700ms ${MOTION.ease}, border-color 700ms ${MOTION.ease}`,
+    <div className="holo-boot">
+      {/* ── status line ── */}
+      <div style={{
+        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+        marginBottom:22, paddingBottom:14, borderBottom:`1px solid ${C.cyan}1A`,
       }}>
-        <button
-          onClick={() => {
-            if (jarvis.continuousMode) { jarvis.setContinuousMode(false); jarvis.stopListening(); }
-            else { jarvis.listening ? jarvis.stopListening() : jarvis.startListening(); }
-          }}
-          style={{ background:"none", border:"none", cursor:"pointer", padding:10, borderRadius:"50%",
-                   transition:`transform ${MOTION.base} ${MOTION.spring}` }}
-          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.04)"}
-          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
-        >
-          <ArcReactor size={104} state={voiceState} />
-        </button>
+        <span className="holo-label" style={{ color:stateColor }}>
+          ◈ {stateLabel}
+        </span>
+        <span className="holo-rule" style={{ flex:1, minWidth:20 }} />
+        <span className="holo-label" style={{ color:C.dimMid }}>{todayStr()}</span>
+        <span className="holo-num" style={{ color:C.cyanBright, fontSize:15 }}>{time}</span>
+      </div>
 
-        <div style={{ ...TYPE.body, color:stateColor, marginTop:6, marginBottom:18,
-                      transition:`color 600ms ${MOTION.ease}` }}>
-          {stateLabel}
+      {/* ── the instrument ── */}
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"center",
+        gap:38, flexWrap:"wrap", marginBottom:26,
+      }}>
+        <div style={{ position:"relative", cursor:"pointer" }}
+             onClick={() => {
+               if (jarvis.continuousMode) { jarvis.setContinuousMode(false); jarvis.stopListening(); }
+               else { jarvis.listening ? jarvis.stopListening() : jarvis.startListening(); }
+             }}>
+          <Hub rings={rings} size={296} sweeping={voiceState !== "idle" || true}>
+            <div className="holo-label" style={{ color:stateColor, marginBottom:8, opacity:0.85 }}>
+              {training ? "training day" : isRestDay() ? "rest day" : "active day"}
+            </div>
+            <div className="holo-num" style={{
+              fontSize:46, color:C.textBright, lineHeight:1,
+              textShadow:`0 0 30px ${stateColor}66`,
+            }}>
+              {Math.round(macros.cal)}
+            </div>
+            <div className="holo-label" style={{ color:C.dimMid, marginTop:8 }}>
+              of {TARGET_CAL} kcal
+            </div>
+            <div className="holo-label" style={{ color:C.dim, marginTop:14, fontSize:9.5 }}>
+              tap to speak
+            </div>
+          </Hub>
         </div>
 
-        {jarvis.transcript && (
-          <div className="rise" style={{ ...TYPE.body, color:C.dimMid, fontStyle:"italic", marginBottom:14 }}>
-            “{jarvis.transcript}”
-          </div>
-        )}
-
-        {jarvis.response && (
-          <div className="rise" style={{
-            ...TYPE.body, color:C.textBright, lineHeight:1.65,
-            maxWidth:520, margin:"0 auto 20px",
-          }}>
-            {jarvis.response}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ display:"flex", gap:9, maxWidth:440, margin:"0 auto" }}>
-          <input className="hud-input" value={cmd} onChange={e=>setCmd(e.target.value)}
-            placeholder="Ask Jarvis…"
-            style={{ flex:1, background:"rgba(255,255,255,0.05)", border:`1px solid ${C.border}`,
-              borderRadius:RADIUS.pill, padding:"12px 20px", color:C.textBright,
-              fontSize:14, outline:"none", fontFamily:"inherit" }} />
-          <HUDBtn variant="primary" onClick={handleSubmit}>Send</HUDBtn>
-        </form>
-
-        {!jarvis.apiKey && (
-          <div style={{ ...TYPE.small, color:C.dim, marginTop:14 }}>
-            No local API key — using the server key if one is set.
-          </div>
-        )}
+        <Legend items={[
+          { label:"intake",   value:Math.round(calL),                 unit:"kcal left", tone:C.cyan   },
+          { label:"protein",  value:Math.round(protL),                unit:"g left",    tone:C.green  },
+          { label: oR ? "readiness" : "sleep",
+            value: oR?.score ?? (avgS ?? "—"),
+            unit:  oR ? "index" : "hr avg",                            tone:C.violet },
+          { label:"waist",    value:lwa ?? "—",                        unit:"cm",       tone:C.amber  },
+        ]} />
       </div>
+
+      {/* ── command line ── */}
+      <div style={{ marginBottom:12 }}>
+        <CommandLine
+          value={cmd}
+          onChange={e=>setCmd(e.target.value)}
+          onSubmit={handleSubmit}
+          state={voiceState}
+        />
+      </div>
+
+      {jarvis.transcript && (
+        <div className="holo-label rise" style={{ color:C.red, marginBottom:10 }}>
+          ▸ {jarvis.transcript}
+        </div>
+      )}
+      {jarvis.response && (
+        <div className="rise" style={{
+          fontSize:14.5, lineHeight:1.7, color:C.text, marginBottom:16,
+          paddingLeft:14, borderLeft:`1px solid ${C.cyan}44`,
+        }}>
+          {jarvis.response}
+        </div>
+      )}
 
       <NowPlaying spotify={spotify} />
 
-      {/* ── Today's numbers ── */}
-      {/* Rings, not bars: two figures that matter get the shape that reads at a
-          glance. Everything else on the page uses a plain track. */}
-      <Bento>
-        <Tile span={3} label="Calories" icon="flame" tone={macros.cal >= TARGET_CAL ? C.orange : C.cyan}>
-          <div style={{ display:"flex", alignItems:"center", gap:18 }}>
-            <Ring pct={macros.cal/TARGET_CAL*100} tone={macros.cal >= TARGET_CAL ? C.orange : C.cyan} size={92}>
-              <span className="data-num" style={{ ...TYPE.statSm, color:C.textBright }}>
-                {Math.round(macros.cal)}
-              </span>
-              <span style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>of {TARGET_CAL}</span>
-            </Ring>
-            <div>
-              <div className="data-num" style={{ ...TYPE.title, color:C.textBright }}>{Math.round(calL)}</div>
-              <div style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>left today</div>
-            </div>
+      {/* ── panels ── */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12, marginTop:14 }}>
+        <Frame label="vitals" span={3} accent={C.cyan}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+            <Readout label="mass"  value={lw  ?? "—"} unit="lb" size={30} />
+            <Readout label="waist" value={lwa ?? "—"} unit="cm" size={30}
+                     tone={!lwa ? C.cyanBright : lwa <= 84 ? C.green : C.amber} />
           </div>
-        </Tile>
-
-        <Tile span={3} label="Protein" icon="bolt" tone={macros.protein >= TARGET_PROTEIN ? C.orange : C.green}>
-          <div style={{ display:"flex", alignItems:"center", gap:18 }}>
-            <Ring pct={macros.protein/TARGET_PROTEIN*100} tone={macros.protein >= TARGET_PROTEIN ? C.orange : C.green} size={92}>
-              <span className="data-num" style={{ ...TYPE.statSm, color:C.textBright }}>
-                {Math.round(macros.protein)}
-              </span>
-              <span style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>of {TARGET_PROTEIN}g</span>
-            </Ring>
-            <div>
-              <div className="data-num" style={{ ...TYPE.title, color:C.textBright }}>{Math.round(protL)}g</div>
-              <div style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>left today</div>
-            </div>
+          <div className="holo-rule" style={{ margin:"16px 0" }} />
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+            <Readout label="sleep 7d" value={avgS ?? "—"} unit="hr" size={30}
+                     tone={!avgS ? C.cyanBright : parseFloat(avgS) >= 7 ? C.green : C.amber} />
+            <Readout label="target"   value="165–170" unit="lb" size={19} tone={C.dimMid} />
           </div>
-        </Tile>
+        </Frame>
 
-        <Tile span={2} className="keep-span" label="Weight" icon="scale">
-          <Stat value={lw ?? "—"} unit={lw ? "lbs" : null} sub="Target 165–170" size="stat" />
-        </Tile>
-
-        <Tile span={2} className="keep-span" label="Waist" icon="droplet"
-              tone={!lwa ? undefined : lwa <= 84 ? C.green : C.orange}>
-          <Stat value={lwa ?? "—"} unit={lwa ? "cm" : null} sub="Target 81–84"
-                tone={!lwa ? C.textBright : lwa <= 84 ? C.green : C.orange} size="stat" />
-        </Tile>
-
-        {oura?.connected && oR ? (
-          <Tile span={2} className="keep-span" label="Readiness" icon="heart" tone={ouraColor(oR.score)}>
-            <Stat value={oR.score ?? "—"} tone={ouraColor(oR.score)} size="stat"
-                  sub={oR.score >= 85 ? "Optimal" : oR.score >= 70 ? "Good" : "Low"} />
-          </Tile>
-        ) : (
-          <Tile span={2} className="keep-span" label="Sleep" icon="moon">
-            <Stat value={avgS ?? "—"} unit={avgS ? "hrs" : null} sub="7-day average"
-                  tone={!avgS ? C.textBright : parseFloat(avgS) >= 7 ? C.green : C.orange} size="stat" />
-          </Tile>
-        )}
+        <Frame label={weather.data ? "environment" : "environment · offline"} span={3} accent={C.violet}>
+          {weather.data ? (
+            <>
+              <Readout label={weather.city || "local"}
+                       value={Math.round(weather.data.temperature_2m)} unit="°f" size={30} tone={C.violet} />
+              <div className="holo-rule" style={{ margin:"16px 0" }} />
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+                <Readout label="humidity" value={weather.data.relative_humidity_2m} unit="%" size={19} tone={C.dimMid} />
+                <Readout label="sky" value={wxDesc(weather.data.weather_code)} size={13} tone={C.dimMid} />
+              </div>
+            </>
+          ) : (
+            <div className="holo-label" style={{ color:C.dim, lineHeight:2 }}>
+              {weather.denied ? "location denied" : "awaiting location"}
+              <button onClick={weather.retry} className="holo-label"
+                style={{ background:"none", border:"none", color:C.cyan, cursor:"pointer",
+                         marginLeft:10, padding:0 }}>retry</button>
+            </div>
+          )}
+        </Frame>
 
         {oura?.connected && oura?.data && (
-          <Tile span={6} label="Last night" icon="moon" tone={C.violet}>
-            <div style={{ display:"flex", gap:34, flexWrap:"wrap" }}>
-              <Stat value={oSl?.score ?? "—"} sub="Sleep score" tone={ouraColor(oSl?.score)} size="statSm" />
-              <Stat value={fmtDur(oSe?.total_sleep_duration)} sub="Total" size="statSm" />
-              <Stat value={fmtDur(oSe?.rem_sleep_duration)}   sub="REM"   tone={C.violet} size="statSm" />
-              <Stat value={fmtDur(oSe?.deep_sleep_duration)}  sub="Deep"  tone={C.blue}   size="statSm" />
+          <Frame label="recovery · oura" span={6} accent={C.violet}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:18 }}>
+              <Readout label="readiness" value={oR?.score ?? "—"} size={30} tone={ouraColor(oR?.score)} />
+              <Readout label="sleep score" value={oSl?.score ?? "—"} size={30} tone={ouraColor(oSl?.score)} />
+              <Readout label="total" value={fmtDur(oSe?.total_sleep_duration)} size={22} />
+              <Readout label="rem" value={fmtDur(oSe?.rem_sleep_duration)} size={22} tone={C.violet} />
             </div>
-          </Tile>
+          </Frame>
         )}
 
         {calendar.connected && calendar.events.length > 0 && (
-          <Tile span={6} label="Schedule" icon="calendar" tone={C.blue}>
+          <Frame label="schedule" span={6} accent={C.cyan}>
             {calendar.events.map((e, i) => (
-              <Row key={i}
-                left={e.summary}
-                right={e.start?.dateTime
-                  ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-                  : "All day"}
-                tone={C.blue} />
+              <div key={i} style={{
+                display:"flex", gap:16, alignItems:"baseline",
+                padding:"9px 0",
+                borderBottom: i < calendar.events.length-1 ? `1px solid ${C.cyan}12` : "none",
+              }}>
+                <span className="holo-num" style={{ fontSize:13, color:C.cyan, minWidth:62 }}>
+                  {e.start?.dateTime
+                    ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+                    : "all day"}
+                </span>
+                <span style={{ fontSize:14, color:C.text }}>{e.summary}</span>
+              </div>
             ))}
-          </Tile>
+          </Frame>
         )}
 
-        <Tile span={6} label={training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
-              icon={training ? "bolt" : "spark"}
-              tone={training ? C.orange : isRestDay() ? C.violet : C.cyan}>
-          <div style={{ ...TYPE.body, color:C.text, maxWidth:560 }}>
+        <Frame label="directive" span={6} accent={training ? C.amber : C.cyan}>
+          <div style={{ fontSize:14.5, lineHeight:1.7, color:C.text, maxWidth:600 }}>
             {training
-              ? "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — hit the protein target before the session."
+              ? "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — clear the protein target before the session."
               : isRestDay()
-              ? "Recovery and mobility. Light activity only, maintenance calories, and still clear the protein floor."
-              : "Active recovery. Light movement, steady nutrition, and close out the macro targets by end of day."}
+              ? "Recovery and mobility. Light activity only, maintenance calories, protein floor still holds."
+              : "Active recovery. Light movement, steady nutrition, close the macro targets by end of day."}
           </div>
-        </Tile>
-      </Bento>
-    </>
+          {ritual && (
+            <>
+              <div className="holo-rule" style={{ margin:"16px 0" }} />
+              <div className="holo-label" style={{ color:C.amber }}>◈ {ritual}</div>
+            </>
+          )}
+        </Frame>
+      </div>
+    </div>
   );
 }
 
@@ -4407,7 +4378,7 @@ export default function Jarvis() {
       background: C.bgDeep,   // the aurora layer supplies all the colour
       overflow: "hidden",
     }}>
-      <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap" rel="stylesheet" />
+      <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=JetBrains+Mono:wght@200;300;400&display=swap" rel="stylesheet" />
 
       {/* The light source. Everything glass on the page picks this up. */}
       <div className="aurora"><span className="a1" /><span className="a2" /><span className="a3" /></div>
@@ -4448,8 +4419,8 @@ export default function Jarvis() {
         }}>
           <ArcReactor size={30} state={jarvisState} />
           <div style={{
-            fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:14, fontWeight:800,
-            letterSpacing:"0.15em",
+            fontFamily:"'Chakra Petch',system-ui,sans-serif", fontSize:16, fontWeight:600,
+            letterSpacing:"0.34em",
             background:`linear-gradient(100deg, ${C.cyanBright}, ${C.cyan} 50%, ${C.violet})`,
             WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
           }}>JARVIS</div>
