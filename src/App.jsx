@@ -1510,7 +1510,7 @@ Wake Up · Focus · Training · Wind Down (warm amber, triggers melatonin) · Sl
 }
 
 // ─── BRIEFING TAB ──────────────────────────────────────────────────────────────
-function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
+function BriefingTab({ macros, measurements, sleep: sd, workouts, hue, spotify, calendar, weather, jarvis, coffeeOn, oura }) {
   const [time, setTime] = useState(timeStr());
   const [cmd,  setCmd]  = useState("");
 
@@ -1519,13 +1519,13 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
     return () => clearInterval(id);
   }, []);
 
-  const lw    = measurements.weight.slice(-1)[0]?.val;
-  const lwa   = measurements.waist.slice(-1)[0]?.val;
-  const avgS  = sd.length ? (sd.slice(-7).reduce((a,b)=>a+b.hours,0)/Math.min(sd.length,7)).toFixed(1) : null;
-  const calL  = Math.max(0, TARGET_CAL - macros.cal);
-  const protL = Math.max(0, TARGET_PROTEIN - macros.protein);
-  const ritual= getTodayRitual();
+  const today   = new Date().toLocaleDateString();
+  const lw      = measurements.weight.slice(-1)[0]?.val;
+  const lwa     = measurements.waist.slice(-1)[0]?.val;
+  const lastNight = sd.slice(-1)[0]?.hours;
+  const trainedToday = workouts.some(w => w.date === today);
   const training = isTrainingDay();
+  const ritual   = getTodayRitual();
   const voiceState = jarvis.listening?"listening":jarvis.thinking?"thinking":jarvis.speaking?"speaking":"idle";
 
   const handleSubmit = (e) => {
@@ -1538,16 +1538,45 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
   const stateColor = { idle:C.cyan, listening:C.red, thinking:C.amber, speaking:C.green }[voiceState];
   const stateLabel = { idle:"standing by", listening:"receiving", thinking:"processing", speaking:"responding" }[voiceState];
 
-  const oR  = oura?.data?.readiness?.slice(-1)[0];
-  const oSl = oura?.data?.dailySleep?.slice(-1)[0];
-  const oSe = oura?.data?.sessions?.slice(-1)[0];
+  // ── adherence ──────────────────────────────────────────────────────────────
+  // The hub answers the question the whole project is for: did you do what you
+  // said you would? Four commitments, each a ring. Nutrition detail belongs in
+  // Macros and Body — a home base should say whether the day is on track, not
+  // reprint every number.
+  const commitments = [
+    { key:"intake",   label:"intake",   tone:C.cyan,
+      pct: Math.min(100, macros.cal/TARGET_CAL*100),
+      value: `${Math.round(macros.cal)}/${TARGET_CAL}`, unit:"kcal" },
+    { key:"protein",  label:"protein",  tone:C.green,
+      pct: Math.min(100, macros.protein/TARGET_PROTEIN*100),
+      value: `${Math.round(macros.protein)}/${TARGET_PROTEIN}`, unit:"g" },
+    { key:"training", label:"training", tone:C.amber,
+      pct: trainedToday ? 100 : 0,
+      value: trainedToday ? "logged" : training ? "due" : "rest", unit:"" },
+    { key:"sleep",    label:"sleep",    tone:C.violet,
+      pct: lastNight ? Math.min(100, lastNight/8*100) : 0,
+      value: lastNight ?? "—", unit: lastNight ? "hr" : "" },
+  ];
+  const score = Math.round(commitments.reduce((a,c)=>a+Math.min(100,c.pct),0) / commitments.length);
 
-  // The hub carries the day's four headline figures as concentric arcs.
-  const rings = [
-    { pct: macros.cal/TARGET_CAL*100,         tone: C.cyan,   ticks: 13 },
-    { pct: macros.protein/TARGET_PROTEIN*100, tone: C.green              },
-    { pct: oR?.score ?? (avgS ? avgS/8*100 : 0), tone: C.violet          },
-    { pct: lwa ? Math.max(0, Math.min(100,(1-(lwa-83)/10)*100)) : 0, tone: C.amber },
+  // ── what's next ────────────────────────────────────────────────────────────
+  const upcoming = (calendar.events ?? [])
+    .filter(e => e.start?.dateTime && new Date(e.start.dateTime) > new Date())
+    .sort((a,b) => new Date(a.start.dateTime) - new Date(b.start.dateTime));
+  const next = upcoming[0];
+  const minsToNext = next ? Math.round((new Date(next.start.dateTime) - Date.now())/60000) : null;
+  const untilNext  = minsToNext == null ? null
+    : minsToNext < 60 ? `${minsToNext} min`
+    : `${Math.floor(minsToNext/60)}h ${minsToNext%60}m`;
+
+  const lightsOn = (hue.lights ?? []).filter(l => l.on).length;
+
+  const systems = [
+    { label:"claude",   on: !!jarvis.apiKey },
+    { label:"spotify",  on: spotify.connected },
+    { label:"calendar", on: calendar.connected },
+    { label:"oura",     on: oura?.connected },
+    { label:"hue",      on: hue.connected },
   ];
 
   return (
@@ -1557,150 +1586,141 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
         display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
         marginBottom:22, paddingBottom:14, borderBottom:`1px solid ${C.cyan}1A`,
       }}>
-        <span className="holo-label" style={{ color:stateColor }}>
-          ◈ {stateLabel}
-        </span>
+        <span className="holo-label" style={{ color:stateColor }}>◈ {stateLabel}</span>
         <span className="holo-rule" style={{ flex:1, minWidth:20 }} />
         <span className="holo-label" style={{ color:C.dimMid }}>{todayStr()}</span>
         <span className="holo-num" style={{ color:C.cyanBright, fontSize:15 }}>{time}</span>
       </div>
 
-      {/* ── the instrument ── */}
+      {/* ── the hub: today's adherence ── */}
       <div style={{
         display:"flex", alignItems:"center", justifyContent:"center",
         gap:38, flexWrap:"wrap", marginBottom:26,
       }}>
-        <div style={{ position:"relative", cursor:"pointer" }}
+        <div style={{ cursor:"pointer" }}
              onClick={() => {
                if (jarvis.continuousMode) { jarvis.setContinuousMode(false); jarvis.stopListening(); }
                else { jarvis.listening ? jarvis.stopListening() : jarvis.startListening(); }
              }}>
-          <Hub rings={rings} size={296} sweeping={voiceState !== "idle" || true}>
+          <Hub rings={commitments.map(c => ({ pct:c.pct, tone:c.tone, ticks: c.key==="intake" ? 13 : 0 }))}
+               size={296}>
             <div className="holo-label" style={{ color:stateColor, marginBottom:8, opacity:0.85 }}>
               {training ? "training day" : isRestDay() ? "rest day" : "active day"}
             </div>
             <div className="holo-num" style={{
               fontSize:46, color:C.textBright, lineHeight:1,
               textShadow:`0 0 30px ${stateColor}66`,
-            }}>
-              {Math.round(macros.cal)}
-            </div>
-            <div className="holo-label" style={{ color:C.dimMid, marginTop:8 }}>
-              of {TARGET_CAL} kcal
-            </div>
-            <div className="holo-label" style={{ color:C.dim, marginTop:14, fontSize:9.5 }}>
-              tap to speak
-            </div>
+            }}>{score}<span style={{ fontSize:20, color:C.dimMid }}>%</span></div>
+            <div className="holo-label" style={{ color:C.dimMid, marginTop:8 }}>on plan</div>
+            <div className="holo-label" style={{ color:C.dim, marginTop:14, fontSize:9.5 }}>tap to speak</div>
           </Hub>
         </div>
 
-        <Legend items={[
-          { label:"intake",   value:Math.round(calL),                 unit:"kcal left", tone:C.cyan   },
-          { label:"protein",  value:Math.round(protL),                unit:"g left",    tone:C.green  },
-          { label: oR ? "readiness" : "sleep",
-            value: oR?.score ?? (avgS ?? "—"),
-            unit:  oR ? "index" : "hr avg",                            tone:C.violet },
-          { label:"waist",    value:lwa ?? "—",                        unit:"cm",       tone:C.amber  },
-        ]} />
+        <Legend items={commitments.map(c => ({
+          label:c.label, value:c.value, unit:c.unit, tone:c.tone,
+        }))} />
       </div>
 
       {/* ── command line ── */}
-      <div style={{ marginBottom:12 }}>
-        <CommandLine
-          value={cmd}
-          onChange={e=>setCmd(e.target.value)}
-          onSubmit={handleSubmit}
-          state={voiceState}
-        />
-      </div>
+      <CommandLine value={cmd} onChange={e=>setCmd(e.target.value)}
+                   onSubmit={handleSubmit} state={voiceState} />
 
       {jarvis.transcript && (
-        <div className="holo-label rise" style={{ color:C.red, marginBottom:10 }}>
+        <div className="holo-label rise" style={{ color:C.red, margin:"12px 0 0" }}>
           ▸ {jarvis.transcript}
         </div>
       )}
       {jarvis.response && (
         <div className="rise" style={{
-          fontSize:14.5, lineHeight:1.7, color:C.text, marginBottom:16,
+          fontSize:14.5, lineHeight:1.7, color:C.text, margin:"14px 0 0",
           paddingLeft:14, borderLeft:`1px solid ${C.cyan}44`,
         }}>
           {jarvis.response}
         </div>
       )}
 
-      <NowPlaying spotify={spotify} />
+      <div style={{ marginTop:14 }}><NowPlaying spotify={spotify} /></div>
 
-      {/* ── panels ── */}
+      {/* ── the base: one panel per domain ── */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12, marginTop:14 }}>
-        <Frame label="vitals" span={3} accent={C.cyan}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-            <Readout label="mass"  value={lw  ?? "—"} unit="lb" size={30} />
-            <Readout label="waist" value={lwa ?? "—"} unit="cm" size={30}
-                     tone={!lwa ? C.cyanBright : lwa <= 84 ? C.green : C.amber} />
-          </div>
-          <div className="holo-rule" style={{ margin:"16px 0" }} />
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-            <Readout label="sleep 7d" value={avgS ?? "—"} unit="hr" size={30}
-                     tone={!avgS ? C.cyanBright : parseFloat(avgS) >= 7 ? C.green : C.amber} />
-            <Readout label="target"   value="165–170" unit="lb" size={19} tone={C.dimMid} />
-          </div>
-        </Frame>
 
-        <Frame label={weather.data ? "environment" : "environment · offline"} span={3} accent={C.violet}>
-          {weather.data ? (
+        <Frame label="next up" span={3} accent={C.cyan}>
+          {next ? (
             <>
-              <Readout label={weather.city || "local"}
-                       value={Math.round(weather.data.temperature_2m)} unit="°f" size={30} tone={C.violet} />
-              <div className="holo-rule" style={{ margin:"16px 0" }} />
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
-                <Readout label="humidity" value={weather.data.relative_humidity_2m} unit="%" size={19} tone={C.dimMid} />
-                <Readout label="sky" value={wxDesc(weather.data.weather_code)} size={13} tone={C.dimMid} />
-              </div>
+              <Readout label={untilNext ? `in ${untilNext}` : "now"}
+                       value={new Date(next.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}
+                       size={28} />
+              <div style={{ fontSize:14, color:C.text, marginTop:10 }}>{next.summary}</div>
+              {upcoming.length > 1 && (
+                <>
+                  <div className="holo-rule" style={{ margin:"14px 0" }} />
+                  {upcoming.slice(1,3).map((e,i) => (
+                    <div key={i} style={{ display:"flex", gap:12, padding:"4px 0" }}>
+                      <span className="holo-num" style={{ fontSize:12, color:C.dimMid, minWidth:58 }}>
+                        {new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}
+                      </span>
+                      <span style={{ fontSize:13, color:C.dimMid }}>{e.summary}</span>
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           ) : (
             <div className="holo-label" style={{ color:C.dim, lineHeight:2 }}>
-              {weather.denied ? "location denied" : "awaiting location"}
-              <button onClick={weather.retry} className="holo-label"
-                style={{ background:"none", border:"none", color:C.cyan, cursor:"pointer",
-                         marginLeft:10, padding:0 }}>retry</button>
+              {calendar.connected ? "nothing scheduled" : "calendar not linked"}
             </div>
           )}
         </Frame>
 
-        {oura?.connected && oura?.data && (
-          <Frame label="recovery · oura" span={6} accent={C.violet}>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:18 }}>
-              <Readout label="readiness" value={oR?.score ?? "—"} size={30} tone={ouraColor(oR?.score)} />
-              <Readout label="sleep score" value={oSl?.score ?? "—"} size={30} tone={ouraColor(oSl?.score)} />
-              <Readout label="total" value={fmtDur(oSe?.total_sleep_duration)} size={22} />
-              <Readout label="rem" value={fmtDur(oSe?.rem_sleep_duration)} size={22} tone={C.violet} />
-            </div>
-          </Frame>
-        )}
+        <Frame label="environment" span={3} accent={C.violet}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+            {weather.data
+              ? <Readout label={weather.city || "outside"}
+                         value={Math.round(weather.data.temperature_2m)} unit="°f" size={28} tone={C.violet}
+                         sub={wxDesc(weather.data.weather_code)} />
+              : <Readout label="outside" value="—" size={28} tone={C.dim}
+                         sub={weather.denied ? "location denied" : "locating"} />}
+            <Readout label="lights"
+                     value={hue.connected ? lightsOn : "—"}
+                     unit={hue.connected ? `of ${hue.lights.length}` : ""}
+                     size={28}
+                     tone={lightsOn ? C.amber : C.dimMid}
+                     sub={coffeeOn ? "coffee on" : "coffee off"} />
+          </div>
+        </Frame>
 
-        {calendar.connected && calendar.events.length > 0 && (
-          <Frame label="schedule" span={6} accent={C.cyan}>
-            {calendar.events.map((e, i) => (
-              <div key={i} style={{
-                display:"flex", gap:16, alignItems:"baseline",
-                padding:"9px 0",
-                borderBottom: i < calendar.events.length-1 ? `1px solid ${C.cyan}12` : "none",
-              }}>
-                <span className="holo-num" style={{ fontSize:13, color:C.cyan, minWidth:62 }}>
-                  {e.start?.dateTime
-                    ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-                    : "all day"}
-                </span>
-                <span style={{ fontSize:14, color:C.text }}>{e.summary}</span>
+        <Frame label="body" span={3} accent={C.cyan}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:18 }}>
+            <Readout label="mass"  value={lw  ?? "—"} unit={lw ? "lb" : ""} size={28}
+                     sub="target 165–170" />
+            <Readout label="waist" value={lwa ?? "—"} unit={lwa ? "cm" : ""} size={28}
+                     tone={!lwa ? C.cyanBright : lwa <= 84 ? C.green : C.amber}
+                     sub="target 81–84" />
+          </div>
+        </Frame>
+
+        <Frame label="systems" span={3} accent={C.dimMid}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px 18px" }}>
+            {systems.map(s => (
+              <div key={s.label} style={{ display:"flex", alignItems:"center", gap:9 }}>
+                <span style={{
+                  width:6, height:6, flexShrink:0,
+                  background: s.on ? C.green : C.dim,
+                  boxShadow: s.on ? `0 0 8px ${C.green}` : "none",
+                  transform:"rotate(45deg)",
+                }} />
+                <span className="holo-label" style={{ color: s.on ? C.text : C.dim }}>{s.label}</span>
               </div>
             ))}
-          </Frame>
-        )}
+          </div>
+        </Frame>
 
         <Frame label="directive" span={6} accent={training ? C.amber : C.cyan}>
           <div style={{ fontSize:14.5, lineHeight:1.7, color:C.text, maxWidth:600 }}>
             {training
-              ? "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — clear the protein target before the session."
+              ? trainedToday
+                ? "Session logged. Hold the protein target through the evening and protect tonight's sleep window."
+                : "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — clear the protein target before the session."
               : isRestDay()
               ? "Recovery and mobility. Light activity only, maintenance calories, protein floor still holds."
               : "Active recovery. Light movement, steady nutrition, close the macro targets by end of day."}
@@ -4339,7 +4359,7 @@ export default function Jarvis() {
     ["macros",        "Macros",       "flame"    ],
     ["analytics",     "Trends",       "chart"    ],
     ["plans",         "Plans",        "calendar" ],
-    ["environment",   "Home",         "home"     ],
+    ["environment",   "Devices",      "home"     ],
     ["recipes",       "Recipes",      "book"     ],
     ["integrations",  "Connections",  "plug"     ],
     ["settings",      "Settings",     "settings" ],
@@ -4439,7 +4459,7 @@ export default function Jarvis() {
         style={{ padding:"26px 20px 130px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:2 }}>
         {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
-        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
+        {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} workouts={workouts} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
         {tab==="macros"        && <MacrosTab macros={macros} setMacros={setMacros} notify={notify} />}
         {tab==="training"      && <TrainingTab workouts={workouts} logWorkout={logWorkout} clearDay={clearDay} error={workoutsError} notify={notify} />}
         {tab==="analytics"     && <AnalyticsTab macros={macros} macroHistory={macroHistory} measurements={measurements} sleep={sleep} />}
