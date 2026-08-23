@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { C, RADIUS, MOTION, applyTokens } from "./styles/tokens.js";
+import { C, RADIUS, TYPE, MOTION, applyTokens } from "./styles/tokens.js";
+import { Icon } from "./ui/Icon.jsx";
+import { Bento, Tile, Stat, Track, Ring, Section, Row, Empty } from "./ui/kit.jsx";
 import "./App.css";
 
 applyTokens();   // mirror the palette onto :root before anything renders
@@ -1533,251 +1535,213 @@ function BriefingTab({ macros, measurements, sleep: sd, hue, spotify, calendar, 
   };
 
   const stateColor = { idle:C.cyan, listening:C.red, thinking:C.yellow, speaking:C.green }[voiceState];
-  const idleLabel  = jarvis.continuousMode ? "Listening continuously" : "Tap to speak";
+  const idleLabel  = jarvis.continuousMode ? "Listening" : "Tap to speak";
   const stateLabel = { idle:idleLabel, listening:"Listening", thinking:"Thinking", speaking:"Responding" }[voiceState];
+
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? "Still up" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+
+  const oR  = oura?.data?.readiness?.slice(-1)[0];
+  const oSl = oura?.data?.dailySleep?.slice(-1)[0];
+  const oSe = oura?.data?.sessions?.slice(-1)[0];
 
   return (
     <>
-      {/* ── Voice Interface — HERO ── */}
-      {/* The one screen that should feel alive. State is carried by light: an
-          aura behind the reactor that changes colour and intensity, rather than
-          brackets and outlines switching colour. */}
-      <div style={{
-        position:"relative", marginBottom:14, overflow:"hidden",
+      {/* ── Greeting. No card: the page starts with a voice, not a container. ── */}
+      <div style={{ margin:"6px 2px 24px" }}>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:16, flexWrap:"wrap" }}>
+          <div>
+            <div style={{ ...TYPE.display, color:C.textBright }}>{greeting}</div>
+            <div style={{ ...TYPE.body, color:C.dimMid, marginTop:8 }}>
+              {todayStr()} · <span className="data-num">{time}</span>
+            </div>
+          </div>
+          <div style={{ marginLeft:"auto", display:"flex", gap:7, flexWrap:"wrap" }}>
+            <span className="chip" style={{
+              background:`${training ? C.orange : C.violet}18`,
+              color: training ? C.orange : C.violet,
+              border:`1px solid ${training ? C.orange : C.violet}30`,
+            }}>
+              <Icon name={training ? "bolt" : "moon"} size={13} />
+              {training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
+            </span>
+            {weather.data && (
+              <span className="chip" style={{
+                background:`${C.blue}14`, color:C.blue, border:`1px solid ${C.blue}28`,
+              }}>
+                <span className="data-num">{Math.round(weather.data.temperature_2m)}°</span>
+                {wxDesc(weather.data.weather_code)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {ritual && (
+          <div style={{
+            ...TYPE.small, color:C.amber, marginTop:16,
+            display:"inline-flex", alignItems:"center", gap:8,
+            padding:"9px 15px", borderRadius:RADIUS.pill,
+            background:`${C.amber}12`, border:`1px solid ${C.amber}26`,
+          }}>
+            <Icon name="spark" size={14} />
+            {ritual}
+          </div>
+        )}
+      </div>
+
+      {/* ── Voice. The one thing on the page allowed to be big and empty. ── */}
+      <div className="tile" style={{
+        position:"relative", borderRadius:RADIUS.xl, marginBottom:12,
+        padding:"34px 24px 26px", textAlign:"center", overflow:"hidden",
         background:`
-          radial-gradient(ellipse 70% 55% at 50% 42%, ${stateColor}14 0%, transparent 70%),
-          linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 38%),
-          ${C.surface}`,
-        backdropFilter:"blur(32px) saturate(170%)",
-        WebkitBackdropFilter:"blur(32px) saturate(170%)",
+          radial-gradient(ellipse 60% 70% at 50% 30%, ${stateColor}1A 0%, transparent 68%),
+          linear-gradient(160deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.015) 60%)`,
         border:`1px solid ${stateColor}2E`,
-        borderRadius:RADIUS.xl,
-        padding:"38px 24px 30px",
-        boxShadow:`
-          0 0 80px ${stateColor}14,
-          0 16px 50px rgba(0,0,0,0.55),
-          inset 0 1px 0 rgba(255,255,255,0.07)`,
-        transition:`border-color 600ms ${MOTION.ease}, box-shadow 600ms ${MOTION.ease}, background 600ms ${MOTION.ease}`,
-        textAlign:"center",
+        transition:`background 700ms ${MOTION.ease}, border-color 700ms ${MOTION.ease}`,
       }}>
-        {/* Single hairline of light along the top edge. */}
-        <div style={{ position:"absolute", top:0, left:"22%", right:"22%", height:1,
-          background:`linear-gradient(90deg, transparent, ${stateColor}AA, transparent)`,
-          transition:`background 600ms ${MOTION.ease}` }} />
+        <button
+          onClick={() => {
+            if (jarvis.continuousMode) { jarvis.setContinuousMode(false); jarvis.stopListening(); }
+            else { jarvis.listening ? jarvis.stopListening() : jarvis.startListening(); }
+          }}
+          style={{ background:"none", border:"none", cursor:"pointer", padding:10, borderRadius:"50%",
+                   transition:`transform ${MOTION.base} ${MOTION.spring}` }}
+          onMouseEnter={e=>e.currentTarget.style.transform="scale(1.04)"}
+          onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}
+        >
+          <ArcReactor size={104} state={voiceState} />
+        </button>
 
-        <div style={{
-          fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:9, fontWeight:600,
-          letterSpacing:"0.42em", textIndent:"0.42em",
-          color:stateColor, marginBottom:30, opacity:0.55,
-          transition:`color 600ms ${MOTION.ease}`,
-        }}>
-          JARVIS
-        </div>
-
-        {/* Arc Reactor — the hero */}
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:28 }}>
-          <button onClick={() => {
-              if (jarvis.continuousMode) {
-                // Tap exits conversation mode entirely
-                jarvis.setContinuousMode(false);
-                jarvis.stopListening();
-              } else {
-                jarvis.listening ? jarvis.stopListening() : jarvis.startListening();
-              }
-            }}
-            style={{ background:"none", border:"none", cursor:"pointer", padding:16, borderRadius:"50%",
-              transition:"transform 0.2s" }}
-            onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
-            onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-            <ArcReactor size={110} state={voiceState} />
-          </button>
-        </div>
-
-        {/* State indicator */}
-        <div style={{
-          fontSize:14, fontWeight:560, letterSpacing:"-0.005em",
-          color:stateColor, marginBottom:18,
-          transition:`color 600ms ${MOTION.ease}`,
-        }}>
+        <div style={{ ...TYPE.body, color:stateColor, marginTop:6, marginBottom:18,
+                      transition:`color 600ms ${MOTION.ease}` }}>
           {stateLabel}
         </div>
 
-        {/* Mode toggle — Manual vs Conversation */}
-        <div style={{ display:"inline-flex", borderRadius:RADIUS.pill, overflow:"hidden",
-          border:`1px solid ${C.border}`, background:"rgba(255,255,255,0.04)",
-          marginBottom:22, flexShrink:0 }}>
-          {[["manual","Manual"],["conversation","Conversation"]].map(([mode, label]) => {
-            const active = (mode === "conversation") === jarvis.continuousMode;
-            const accent = mode === "conversation" ? C.green : C.cyan;
-            return (
-              <button key={mode} onClick={() => {
-                const goConversation = mode === "conversation";
-                jarvis.setContinuousMode(goConversation);
-                // Auto-start listening when switching into conversation mode
-                if (goConversation && !jarvis.listening && !jarvis.thinking && !jarvis.speaking) {
-                  setTimeout(() => jarvis.startListening(), 150);
-                } else if (!goConversation) {
-                  jarvis.stopListening();
-                }
-              }} style={{
-                background: active ? `${accent}1A` : "transparent",
-                border: "none",
-                borderRight: mode === "manual" ? `1px solid ${C.border}` : "none",
-                padding:"8px 20px",
-                fontSize:13, letterSpacing:"-0.005em", fontFamily:"inherit",
-                fontWeight:580, cursor:"pointer",
-                color: active ? accent : C.dimMid,
-                transition:`all ${MOTION.base} ${MOTION.ease}`,
-                boxShadow: active ? `inset 0 0 12px ${accent}18` : "none",
-              }}>
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Transcript */}
         {jarvis.transcript && (
-          <div className="rise" style={{
-            fontSize:13, color:C.red, marginBottom:12, fontStyle:"italic",
-            opacity:0.9, letterSpacing:"0.02em",
-          }}>
-            "{jarvis.transcript}"
+          <div className="rise" style={{ ...TYPE.body, color:C.dimMid, fontStyle:"italic", marginBottom:14 }}>
+            “{jarvis.transcript}”
           </div>
         )}
 
-        {/* Response */}
         {jarvis.response && (
           <div className="rise" style={{
-            fontSize:15, color:C.textBright, lineHeight:1.7, marginBottom:20,
-            maxWidth:520, margin:"0 auto 20px", fontWeight:400,
+            ...TYPE.body, color:C.textBright, lineHeight:1.65,
+            maxWidth:520, margin:"0 auto 20px",
           }}>
             {jarvis.response}
           </div>
         )}
 
-        {/* Text input */}
-        <form onSubmit={handleSubmit} style={{ display:"flex", gap:10, maxWidth:460, margin:"0 auto" }}>
+        <form onSubmit={handleSubmit} style={{ display:"flex", gap:9, maxWidth:440, margin:"0 auto" }}>
           <input className="hud-input" value={cmd} onChange={e=>setCmd(e.target.value)}
-            placeholder="Type a command…"
-            style={{ flex:1, background:"rgba(0,200,255,0.05)", border:`1px solid ${C.border}`,
-              borderRadius:10, padding:"11px 16px", color:C.text, fontSize:13,
-              outline:"none", fontFamily:"inherit", transition:"border-color 0.2s, box-shadow 0.2s" }} />
-          <HUDBtn variant="primary" onClick={handleSubmit} style={{ padding:"11px 20px", borderRadius:10 }}>Send</HUDBtn>
+            placeholder="Ask Jarvis…"
+            style={{ flex:1, background:"rgba(255,255,255,0.05)", border:`1px solid ${C.border}`,
+              borderRadius:RADIUS.pill, padding:"12px 20px", color:C.textBright,
+              fontSize:14, outline:"none", fontFamily:"inherit" }} />
+          <HUDBtn variant="primary" onClick={handleSubmit}>Send</HUDBtn>
         </form>
 
         {!jarvis.apiKey && (
-          <div style={{ fontSize:11, color:C.dimMid, marginTop:16,
-            padding:"8px 16px", background:"rgba(255,255,255,0.03)",
-            border:`1px solid rgba(255,255,255,0.08)`, borderRadius:8, display:"inline-block", letterSpacing:"0.04em" }}>
-            No local API key — using server key if configured. Add yours in Integrations → Claude AI Brain.
+          <div style={{ ...TYPE.small, color:C.dim, marginTop:14 }}>
+            No local API key — using the server key if one is set.
           </div>
         )}
       </div>
 
-      {/* ── Now Playing ── */}
       <NowPlaying spotify={spotify} />
 
-      {/* ── Ritual Banner ── */}
-      {ritual && (
-        <div style={{ background:"rgba(255,214,0,0.06)", border:`1px solid rgba(255,214,0,0.2)`,
-          borderRadius:4, padding:"10px 16px", marginBottom:14, fontSize:14, color:C.yellow,
-          display:"flex", alignItems:"center", gap:8 }}>
-          {ritual}
-        </div>
-      )}
-
-      {/* ── Time & Weather ── */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
-        <HUDCard style={{ padding:"14px 16px", marginBottom:0 }}>
-          <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:4 }}>LOCAL TIME</div>
-          <div style={{ fontSize:26, fontWeight:700, color:C.cyan, letterSpacing:"0.06em", fontVariantNumeric:"tabular-nums" }}>{time}</div>
-          <div style={{ fontSize:11, color:C.dim, marginTop:3 }}>{todayStr()}</div>
-        </HUDCard>
-        <HUDCard style={{ padding:"14px 16px", marginBottom:0 }}>
-          <div style={{ fontSize:10, color:C.dim, letterSpacing:"0.1em", marginBottom:4 }}>ENVIRONMENT</div>
-          {weather.data
-            ? <>
-                <div style={{ fontSize:26, fontWeight:700, color:C.text }}>{wxEmoji(weather.data.weather_code)} {Math.round(weather.data.temperature_2m)}°F</div>
-                <div style={{ fontSize:11, color:C.dim, marginTop:3 }}>{wxDesc(weather.data.weather_code)}{weather.city ? " · "+weather.city : ""} · {weather.data.relative_humidity_2m}% RH</div>
-              </>
-            : <div style={{ fontSize:12, color:C.dim, marginTop:6 }}>
-                {weather.denied ? "Location denied." : "Allow location access for weather."}
-                <button onClick={weather.retry} style={{ background:"none", border:"none", color:C.cyan, cursor:"pointer", fontSize:11, marginLeft:6, padding:0 }}>Retry</button>
-              </div>
-          }
-        </HUDCard>
-      </div>
-
-      {/* ── Nutrition ── */}
-      <HUDCard title="Nutrition Status">
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          <Metric label="Calories" value={Math.round(macros.cal)} unit={`/ ${TARGET_CAL}`} sub={`${Math.round(calL)} remaining`}
-            color={macros.cal >= TARGET_CAL ? C.orange : C.cyan} pct={macros.cal/TARGET_CAL*100} barColor={C.cyan} />
-          <Metric label="Protein" value={`${Math.round(macros.protein)}g`} unit={`/ ${TARGET_PROTEIN}g`} sub={`${Math.round(protL)}g remaining`}
-            color={macros.protein >= TARGET_PROTEIN ? C.orange : C.green} pct={macros.protein/TARGET_PROTEIN*100} barColor={C.green} />
-        </div>
-      </HUDCard>
-
-      {/* ── Body & Recovery ── */}
-      {(() => {
-        const oR  = oura?.data?.readiness?.slice(-1)[0];
-        const oSl = oura?.data?.dailySleep?.slice(-1)[0];
-        const oSe = oura?.data?.sessions?.slice(-1)[0];
-        return (
-          <HUDCard title="Body & Recovery" accent={oura?.connected ? C.green : C.cyan}>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
-              <Metric label="Weight" value={lw || "—"} unit="lbs" color={C.text} />
-              <Metric label="Waist" value={lwa || "—"} unit="cm" sub="Target 81-84"
-                color={!lwa ? C.text : lwa <= 84 ? C.green : C.orange}
-                pct={lwa ? Math.max(0, Math.min(100, (1-(lwa-83)/10)*100)) : 0}
-                barColor={lwa && lwa <= 84 ? C.green : C.orange} />
-              {oura?.connected && oura?.data
-                ? <Metric label="Readiness" value={oR?.score ?? "—"}
-                    sub={oR?.score >= 85 ? "Optimal" : oR?.score >= 70 ? "Good" : oR?.score ? "Low" : "Loading…"}
-                    color={ouraColor(oR?.score)} pct={oR?.score} barColor={ouraColor(oR?.score)} />
-                : <Metric label="Avg Sleep" value={avgS || "—"} unit="hrs"
-                    color={!avgS ? C.text : parseFloat(avgS) >= 7 ? C.green : C.red} />
-              }
+      {/* ── Today's numbers ── */}
+      {/* Rings, not bars: two figures that matter get the shape that reads at a
+          glance. Everything else on the page uses a plain track. */}
+      <Bento>
+        <Tile span={3} label="Calories" icon="flame" tone={macros.cal >= TARGET_CAL ? C.orange : C.cyan}>
+          <div style={{ display:"flex", alignItems:"center", gap:18 }}>
+            <Ring pct={macros.cal/TARGET_CAL*100} tone={macros.cal >= TARGET_CAL ? C.orange : C.cyan} size={92}>
+              <span className="data-num" style={{ ...TYPE.statSm, color:C.textBright }}>
+                {Math.round(macros.cal)}
+              </span>
+              <span style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>of {TARGET_CAL}</span>
+            </Ring>
+            <div>
+              <div className="data-num" style={{ ...TYPE.title, color:C.textBright }}>{Math.round(calL)}</div>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>left today</div>
             </div>
-            {oura?.connected && oura?.data && (
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginTop:10 }}>
-                <Metric label="Sleep Score" value={oSl?.score ?? "—"}
-                  color={ouraColor(oSl?.score)} pct={oSl?.score} barColor={ouraColor(oSl?.score)} />
-                <Metric label="Last Night" value={fmtDur(oSe?.total_sleep_duration)} color={C.text} />
-                <Metric label="REM" value={fmtDur(oSe?.rem_sleep_duration)} color={C.purple} />
-              </div>
-            )}
-          </HUDCard>
-        );
-      })()}
+          </div>
+        </Tile>
 
-      {/* ── Calendar ── */}
-      {calendar.connected && calendar.events.length > 0 && (
-        <HUDCard title="Today's Schedule" accent={C.blue}>
-          {calendar.events.map((e, i) => {
-            const t = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "All day";
-            return (
-              <div key={i} style={{ display:"flex", gap:14, padding:"8px 0", borderBottom: i < calendar.events.length-1 ? `1px solid ${C.borderDim}` : "none" }}>
-                <div style={{ fontSize:11, color:C.blue, minWidth:52, paddingTop:1, fontVariantNumeric:"tabular-nums" }}>{t}</div>
-                <div style={{ fontSize:13, color:C.text }}>{e.summary}</div>
-              </div>
-            );
-          })}
-        </HUDCard>
-      )}
+        <Tile span={3} label="Protein" icon="bolt" tone={macros.protein >= TARGET_PROTEIN ? C.orange : C.green}>
+          <div style={{ display:"flex", alignItems:"center", gap:18 }}>
+            <Ring pct={macros.protein/TARGET_PROTEIN*100} tone={macros.protein >= TARGET_PROTEIN ? C.orange : C.green} size={92}>
+              <span className="data-num" style={{ ...TYPE.statSm, color:C.textBright }}>
+                {Math.round(macros.protein)}
+              </span>
+              <span style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>of {TARGET_PROTEIN}g</span>
+            </Ring>
+            <div>
+              <div className="data-num" style={{ ...TYPE.title, color:C.textBright }}>{Math.round(protL)}g</div>
+              <div style={{ ...TYPE.small, color:C.dim, marginTop:2 }}>left today</div>
+            </div>
+          </div>
+        </Tile>
 
-      {/* ── Day Protocol ── */}
-      <HUDCard title={training?"⚡ Training Day Protocol":isRestDay()?"😴 Rest Day Protocol":"🏃 Active Day"}
-        accent={training ? C.orange : isRestDay() ? C.purple : C.dim}>
-        <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>
-          {training
-            ? "Prioritize compound lifts and high protein intake. Pre-workout window: 4:30–5:00 PM. Hit protein target before the session."
-            : isRestDay()
-            ? "Recovery and mobility focus. Light activity only. Maintain maintenance calories and hit your protein floor."
-            : "Active recovery day. Light movement, steady nutrition. Push to close out your macro targets by end of day."}
-        </div>
-      </HUDCard>
+        <Tile span={2} className="keep-span" label="Weight" icon="scale">
+          <Stat value={lw ?? "—"} unit={lw ? "lbs" : null} sub="Target 165–170" size="stat" />
+        </Tile>
+
+        <Tile span={2} className="keep-span" label="Waist" icon="droplet"
+              tone={!lwa ? undefined : lwa <= 84 ? C.green : C.orange}>
+          <Stat value={lwa ?? "—"} unit={lwa ? "cm" : null} sub="Target 81–84"
+                tone={!lwa ? C.textBright : lwa <= 84 ? C.green : C.orange} size="stat" />
+        </Tile>
+
+        {oura?.connected && oR ? (
+          <Tile span={2} className="keep-span" label="Readiness" icon="heart" tone={ouraColor(oR.score)}>
+            <Stat value={oR.score ?? "—"} tone={ouraColor(oR.score)} size="stat"
+                  sub={oR.score >= 85 ? "Optimal" : oR.score >= 70 ? "Good" : "Low"} />
+          </Tile>
+        ) : (
+          <Tile span={2} className="keep-span" label="Sleep" icon="moon">
+            <Stat value={avgS ?? "—"} unit={avgS ? "hrs" : null} sub="7-day average"
+                  tone={!avgS ? C.textBright : parseFloat(avgS) >= 7 ? C.green : C.orange} size="stat" />
+          </Tile>
+        )}
+
+        {oura?.connected && oura?.data && (
+          <Tile span={6} label="Last night" icon="moon" tone={C.violet}>
+            <div style={{ display:"flex", gap:34, flexWrap:"wrap" }}>
+              <Stat value={oSl?.score ?? "—"} sub="Sleep score" tone={ouraColor(oSl?.score)} size="statSm" />
+              <Stat value={fmtDur(oSe?.total_sleep_duration)} sub="Total" size="statSm" />
+              <Stat value={fmtDur(oSe?.rem_sleep_duration)}   sub="REM"   tone={C.violet} size="statSm" />
+              <Stat value={fmtDur(oSe?.deep_sleep_duration)}  sub="Deep"  tone={C.blue}   size="statSm" />
+            </div>
+          </Tile>
+        )}
+
+        {calendar.connected && calendar.events.length > 0 && (
+          <Tile span={6} label="Schedule" icon="calendar" tone={C.blue}>
+            {calendar.events.map((e, i) => (
+              <Row key={i}
+                left={e.summary}
+                right={e.start?.dateTime
+                  ? new Date(e.start.dateTime).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+                  : "All day"}
+                tone={C.blue} />
+            ))}
+          </Tile>
+        )}
+
+        <Tile span={6} label={training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
+              icon={training ? "bolt" : "spark"}
+              tone={training ? C.orange : isRestDay() ? C.violet : C.cyan}>
+          <div style={{ ...TYPE.body, color:C.text, maxWidth:560 }}>
+            {training
+              ? "Prioritise compound lifts and high protein. Pre-workout window 4:30–5:00 PM — hit the protein target before the session."
+              : isRestDay()
+              ? "Recovery and mobility. Light activity only, maintenance calories, and still clear the protein floor."
+              : "Active recovery. Light movement, steady nutrition, and close out the macro targets by end of day."}
+          </div>
+        </Tile>
+      </Bento>
     </>
   );
 }
@@ -4396,18 +4360,18 @@ export default function Jarvis() {
   }, [jarvis.apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const TABS = [
-    ["ai",            "Jarvis AI"     ],
-    ["briefing",      "Briefing"      ],
-    ["plans",         "Plans"         ],
-    ["macros",        "Macros"        ],
-    ["training",      "Training"      ],
-    ["analytics",     "Analytics"     ],
-    ["environment",   "Home"          ],
-    ["recipes",       "Recipes"       ],
-    ["body",          "Body"          ],
-    ["sleep",         "Sleep"         ],
-    ["integrations",  "Integrations"  ],
-    ["settings",      "Settings"      ],
+    ["briefing",      "Today",        "spark"    ],
+    ["ai",            "Jarvis",       "message"  ],
+    ["body",          "Body",         "scale"    ],
+    ["training",      "Training",     "dumbbell" ],
+    ["sleep",         "Sleep",        "moon"     ],
+    ["macros",        "Macros",       "flame"    ],
+    ["analytics",     "Trends",       "chart"    ],
+    ["plans",         "Plans",        "calendar" ],
+    ["environment",   "Home",         "home"     ],
+    ["recipes",       "Recipes",      "book"     ],
+    ["integrations",  "Connections",  "plug"     ],
+    ["settings",      "Settings",     "settings" ],
   ];
 
   const training = isTrainingDay();
@@ -4440,15 +4404,14 @@ export default function Jarvis() {
   return (
     <div style={{
       minHeight:"100vh", color:C.text, position:"relative",
-      // Two soft light sources rather than a flat fill — the room the UI sits in.
-      background:`
-        radial-gradient(ellipse 100% 50% at 50% -8%, ${C.cyan}14 0%, transparent 62%),
-        radial-gradient(ellipse 70% 46% at 92% 104%, ${C.violet}10 0%, transparent 60%),
-        ${C.bg}`,
+      background: C.bgDeep,   // the aurora layer supplies all the colour
+      overflow: "hidden",
     }}>
       <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&display=swap" rel="stylesheet" />
 
-      <div className="hud-grid" />
+      {/* The light source. Everything glass on the page picks this up. */}
+      <div className="aurora"><span className="a1" /><span className="a2" /><span className="a3" /></div>
+      <div className="grain" />
 
       {/* Toast */}
       {notification && (
@@ -4469,89 +4432,40 @@ export default function Jarvis() {
       )}
 
       {/* ── HEADER ── */}
-      {/* Apple's translucent chrome: the content scrolls under it and stays
-          faintly visible, which is what keeps a sticky bar from feeling like a lid. */}
+      {/* Deliberately thin. The greeting below already says what day it is and
+          the bento already shows the macros — a header repeating both was just
+          taking the top of every screen. */}
       <div style={{
         position:"sticky", top:0, zIndex:100,
-        background:"rgba(4,7,14,0.72)",
-        backdropFilter:"blur(32px) saturate(180%)",
-        WebkitBackdropFilter:"blur(32px) saturate(180%)",
-        borderBottom:`1px solid ${C.border}`,
+        background:"rgba(8,9,12,0.55)",
+        backdropFilter:"blur(28px) saturate(180%)",
+        WebkitBackdropFilter:"blur(28px) saturate(180%)",
+        borderBottom:`1px solid ${C.borderDim}`,
       }}>
-        <div style={{ padding:"12px 20px 0", maxWidth:760, margin:"0 auto" }}>
-          {/* Top row */}
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            {/* Logo + reactor */}
-            <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-              <ArcReactor size={40} state={jarvisState} />
-              <div>
-                {/* Orbitron survives here and nowhere else. A display face used
-                    once is identity; used everywhere it's costume. */}
-                <div style={{
-                  fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:15, fontWeight:800,
-                  letterSpacing:"0.16em",
-                  background:`linear-gradient(100deg, ${C.cyanBright}, ${C.cyan} 45%, ${C.violet})`,
-                  WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
-                }}>
-                  JARVIS
-                </div>
-                <div className="wordmark-sub">Just A Rather Very Intelligent System</div>
-              </div>
-            </div>
+        <div style={{
+          maxWidth:760, margin:"0 auto", padding:"11px 20px",
+          display:"flex", alignItems:"center", gap:14,
+        }}>
+          <ArcReactor size={30} state={jarvisState} />
+          <div style={{
+            fontFamily:"'Orbitron',system-ui,sans-serif", fontSize:14, fontWeight:800,
+            letterSpacing:"0.15em",
+            background:`linear-gradient(100deg, ${C.cyanBright}, ${C.cyan} 50%, ${C.violet})`,
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent",
+          }}>JARVIS</div>
 
-            {/* Right status */}
-            <div style={{ textAlign:"right" }}>
-              <div style={{
-                fontSize:11, fontWeight:640, letterSpacing:"0.04em", marginBottom:7,
-                color: training ? C.orange : isRestDay() ? C.purple : C.green,
-              }}>
-                {training ? "Training day" : isRestDay() ? "Rest day" : "Active day"}
-              </div>
-              <div className="status-dots" style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-                <StatusDot on={spotify.connected}  label={spotify.connected && spotify.expiry && (spotify.expiry - Date.now() < 10*60*1000) ? "Spotify ⚠" : "Spotify"}  />
-                <StatusDot on={calendar.connected} label={calendar.connected && calendar.expiry && (calendar.expiry - Date.now() < 10*60*1000) ? "Cal ⚠" : "Cal"}      />
-                <StatusDot on={oura.connected}     label="Oura"     />
-                <StatusDot on={hue.connected}      label="Hue"      />
-              </div>
-            </div>
-          </div>
-
-          {/* Status pills */}
-          <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
-            {[
-              { label:`${Math.round(TARGET_CAL - macros.cal)} kcal`, color: macros.cal >= TARGET_CAL ? C.orange : C.cyan },
-              { label:`${Math.round(TARGET_PROTEIN - macros.protein)}g protein`, color: macros.protein >= TARGET_PROTEIN ? C.orange : C.green },
-              weather.data && { label:`${Math.round(weather.data.temperature_2m)}° ${wxEmoji(weather.data.weather_code)}`, color:C.blue },
-              { label: new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}), color:C.dimMid },
-            ].filter(Boolean).map((p, i) => (
-              <span key={i} className="chip data-num" style={{
-                background:`${p.color}14`, color:p.color, border:`1px solid ${p.color}2E`,
-              }}>{p.label}</span>
-            ))}
-          </div>
-
-          {/* Tab bar — one pill slides between tabs (see .tab-indicator) */}
-          <div className="tab-strip no-scrollbar" ref={stripRef}>
-            <div className="tab-indicator" style={{
-              transform:`translateX(${indicator.x}px)`,
-              width:indicator.w,
-              opacity:indicator.w ? 1 : 0,
-            }} />
-            {TABS.map(([id, label]) => (
-              <button
-                key={id}
-                ref={el => { tabRefs.current[id] = el; }}
-                className={`tab-btn${tab===id?" active":""}`}
-                onClick={()=>setTab(id)}
-              >{label}</button>
-            ))}
+          <div className="status-dots" style={{ marginLeft:"auto", display:"flex", gap:12 }}>
+            <StatusDot on={spotify.connected}  label="Spotify" />
+            <StatusDot on={calendar.connected} label="Cal"     />
+            <StatusDot on={oura.connected}     label="Oura"    />
+            <StatusDot on={hue.connected}      label="Hue"     />
           </div>
         </div>
       </div>
 
       {/* Content — keyed on the tab so switching replays the stagger */}
       <div key={tab} className="view-enter"
-        style={{ padding:"26px 20px 120px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:1 }}>
+        style={{ padding:"26px 20px 130px", maxWidth:760, margin:"0 auto", position:"relative", zIndex:2 }}>
         {tab==="ai"            && <JarvisAITab macros={macros} measurements={measurements} oura={oura} hue={hue} sleep={sleep} coffeeOn={coffeeOn} jarvis={jarvis} />}
         {tab==="plans"         && <PlansTab apiKey={jarvis.apiKey} />}
         {tab==="briefing"      && <BriefingTab macros={macros} measurements={measurements} sleep={sleep} hue={hue} spotify={spotify} calendar={calendar} weather={weather} jarvis={jarvis} coffeeOn={coffeeOn} notify={notify} oura={oura} />}
@@ -4564,6 +4478,28 @@ export default function Jarvis() {
         {tab==="sleep"         && <SleepTab sleep={sleep} logSleep={logSleep} error={sleepError} notify={notify} oura={oura} />}
         {tab==="integrations"  && <IntegrationsTab jarvis={jarvis} spotify={spotify} calendar={calendar} crypto={crypto} webhooks={webhooks} />}
         {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
+      </div>
+
+      {/* ── DOCK ── */}
+      <div className="dock no-scrollbar">
+        <div className="dock-track" ref={stripRef}>
+        <div className="dock-pill" style={{
+          transform:`translateX(${indicator.x}px)`,
+          width:indicator.w,
+          opacity:indicator.w ? 1 : 0,
+        }} />
+        {TABS.map(([id, label, icon]) => (
+          <button
+            key={id}
+            ref={el => { tabRefs.current[id] = el; }}
+            className={`dock-item${tab===id?" active":""}`}
+            onClick={()=>setTab(id)}
+          >
+            <Icon name={icon} size={16} strokeWidth={tab===id ? 1.9 : 1.6} />
+            {label}
+          </button>
+        ))}
+        </div>
       </div>
 
       {/* Floating orb */}
