@@ -20,7 +20,9 @@
     "preview": "vite preview",
     "db:init": "node db/init.js",
     "db:migrate": "node db/migrate-localstorage.js",
-    "ingest:check": "node server/ingest/check.js"
+    "ingest:check": "node server/ingest/check.js",
+    "launchd:install": "bash scripts/install-launchd.sh",
+    "launchd:uninstall": "bash scripts/uninstall-launchd.sh"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

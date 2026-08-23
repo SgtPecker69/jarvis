@@ -140,14 +140,28 @@ The mixed-content problem in the PRD is now actually dissolved, not just describ
 exercised (bad IP → "No answer from the bridge at … within 4s", surfaced in the UI). The success
 path needs Mark's bridge IP and API key.
 
-## Next — Task 5: collectors
+## Task 5: collectors — framework done, Oura ported, needs tokens
 
-Idempotent, backfill on wake. A closed lid means late data, not lost data.
+`server/collectors/`. Runs hourly, asks for the last 14 days every time, so a closed lid means
+late data. Idempotency is free from `UNIQUE(source, metric, ts)` — re-collecting a day corrects it.
+A collector without its credentials is skipped and says why; it never looks like it worked.
+`GET /api/collect` shows status, `POST /api/collect` runs one now.
 
-- [ ] Oura (already has a working integration to port)
-- [ ] Whoop — new. OAuth developer platform, gives recovery, strain, sleep, workouts.
-- [ ] Google Calendar
-- [ ] Hue / LAN device state
+- [x] Runner, status tracking, hourly schedule, manual trigger.
+- [x] **Oura ported off the browser.** Writes `readiness_score`, `sleep_score`, `sleep_hours`,
+      `rem_hours`, `deep_hours`, `resting_hr`, `hrv`, `steps`, `active_kcal` — all tagged
+      `source='oura'`, timestamped noon UTC on the day they describe so they line up with manual
+      entries. Naps are filtered out; only `long_sleep` counts.
+      **Verified against the real API**: a bad token returns "Oura rejected the token — check
+      OURA_TOKEN in .env". Needs Mark's real token to collect anything.
+- [ ] **Needs Mark:** put the Oura Personal Access Token in `.env` as `OURA_TOKEN`
+      (cloud.ouraring.com/personal-access-tokens).
+- [ ] Whoop — needs Mark to create an app at developer.whoop.com for a client ID and secret.
+      `.env.example` already has the slots.
+- [ ] Google Calendar — needs an OAuth decision. Local-first removes the reason for the implicit
+      flow, so the proper authorization-code flow is now possible; see `DECISIONS.md`.
+- [ ] Hue device state — the route exists (`/api/hue/lights`); it just needs polling on a timer
+      and writing to `devices`.
 
 ## Task 6: the watched-folder ingester — BUILT 2026-08-22, parsers unconfirmed
 
@@ -178,9 +192,18 @@ if they differ — that's a 2-minute change in `server/ingest/parsers.js`.
 - [ ] Apple Health export — not started. It's XML, not CSV, so it needs its own path. Health Auto
       Export writing CSV to the inbox on a schedule would avoid that entirely.
 
-## Next — Task 7: launchd agent
+## Task 7: launchd agent — written, not installed
 
-- [ ] Server starts at login; collectors run on intervals.
+- [x] `launchd/com.markadler.jarvis.plist` plus install/uninstall scripts. `RunAtLoad`, restart on
+      crash, 10s throttle so a crash loop doesn't spin, logs to `~/Library/Logs/jarvis.log`.
+      The node path is substituted at install time because Homebrew/nvm/system differ.
+      Generated plist validated with `plutil -lint`.
+- [x] Collectors already run on an interval inside the server process, so the agent only needs to
+      keep the server up.
+- [ ] **Needs Mark:** `npm run launchd:install`. Not run automatically — it changes your system.
+      Undo any time with `npm run launchd:uninstall`.
+- [ ] The server needs Full Disk Access to read the iMessage database once it runs under launchd.
+      System Settings → Privacy & Security → Full Disk Access → add the node binary.
 
 ## Later
 

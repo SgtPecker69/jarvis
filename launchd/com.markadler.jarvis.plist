@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Starts the Jarvis server at login and restarts it if it dies.
+
+  Install:   npm run launchd:install
+  Uninstall: npm run launchd:uninstall
+  Logs:      tail -f ~/Library/Logs/jarvis.log
+
+  __NODE__ and __DIR__ are filled in by scripts/install-launchd.sh, because the
+  path to node differs between Homebrew, nvm and the system install.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.markadler.jarvis</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__NODE__</string>
+        <string>__DIR__/server.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__DIR__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- A laptop closes. If the process dies, bring it back. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <!-- Don't respawn faster than this if it's crash-looping. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/jarvis.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/jarvis.error.log</string>
+</dict>
+</plist>
