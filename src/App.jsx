@@ -2434,12 +2434,20 @@ function EnvironmentTab({ hue, setHue, coffeeOn, setCoffeeOn, sceneLoading, appl
     const ip = hueInp.ip.trim(), user = hueInp.username.trim();
     if (!ip || !user) { notify("Enter bridge IP and API key", "error"); return; }
     try {
-      const d = await fetch(`http://${ip}/api/${user}/lights`).then(r=>r.json());
-      if (!d || d[0]?.error) throw new Error("auth fail");
-      const lights = Object.entries(d).map(([id,l]) => ({ id, name:l.name, on:l.state.on, bri:l.state.bri }));
-      setHue({ connected:true, bridgeIp:ip, username:user, lights });
-      notify("Hue Bridge connected", "success");
-    } catch { notify("Could not connect to Hue Bridge", "error"); }
+      // Through the server — the browser can't reach a LAN bridge over plain HTTP.
+      const res  = await fetch("/api/hue/lights", {
+        method:  "POST",
+        headers: { "Content-Type":"application/json" },
+        body:    JSON.stringify({ ip, username:user }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not reach the bridge");
+
+      setHue({ connected:true, bridgeIp:ip, username:user, lights:data.lights });
+      notify(`Hue Bridge connected — ${data.lights.length} lights`, "success");
+    } catch (e) {
+      notify(e.message, "error");   // say what actually went wrong, not just "failed"
+    }
   };
 
   return (
@@ -4257,26 +4265,39 @@ export default function Jarvis() {
     }
   }, []);
 
-  const callHueApi = async (path, method = "GET", body = null) => {
-    if (!hue.bridgeIp || !hue.username) return null;
-    const opts = { method, headers: { "Content-Type":"application/json" } };
-    if (body) opts.body = JSON.stringify(body);
-    try { return await fetch(`http://${hue.bridgeIp}/api/${hue.username}${path}`, opts).then(r=>r.json()); }
-    catch { return null; }
-  };
-
+  // The bridge is on the LAN over plain HTTP, which a browser can't reach from
+  // an HTTPS page. The server can, so the call goes through it.
   const applyScene = useCallback(async (scene) => {
     setSceneLoading(scene.id);
-    if (hue.connected && hue.lights.length > 0) {
-      await Promise.all(hue.lights.map(l =>
-        callHueApi(`/lights/${l.id}/state`, "PUT", { on:scene.bri>0, bri:scene.bri, ct:scene.ct, transitiontime:10 })
-      ));
-      notify(`${scene.label} scene activated`, "success");
-    } else {
-      await new Promise(r => setTimeout(r, 500));
-      notify(`${scene.label} — connect Hue Bridge to control lights`, "success");
+    try {
+      if (hue.connected && hue.lights.length > 0) {
+        const res = await fetch("/api/hue/state", {
+          method:  "PUT",
+          headers: { "Content-Type":"application/json" },
+          body:    JSON.stringify({
+            ip:       hue.bridgeIp,
+            username: hue.username,
+            lightIds: hue.lights.map(l => l.id),
+            state:    { on:scene.bri>0, bri:scene.bri, ct:scene.ct, transitiontime:10 },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Bridge did not respond");
+
+        notify(
+          data.failed?.length
+            ? `${scene.label} — ${data.applied} of ${data.applied + data.failed.length} lights`
+            : `${scene.label} scene activated`,
+          data.failed?.length ? "error" : "success"
+        );
+      } else {
+        notify(`${scene.label} — connect Hue Bridge to control lights`, "success");
+      }
+    } catch (e) {
+      notify(`Lights: ${e.message}`, "error");
+    } finally {
+      setSceneLoading(null);
     }
-    setSceneLoading(null);
   }, [hue]);
 
   const handleAction = useCallback(async (action) => {

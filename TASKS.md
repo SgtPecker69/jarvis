@@ -122,13 +122,23 @@ every change instead of snapshotted at midnight.
 - [ ] Move the Anthropic / Groq / ElevenLabs keys out of the browser and into `.env`. The server
       already prefers `.env`; the browser fields still work, so this is a migration, not a fix.
 
-## Next — Task 4: expand server.js into the real local API
+## Task 4: server.js as the real local API — DONE 2026-08-22
 
-The mixed-content problem in the PRD dissolves here — LAN calls move server-side.
+The mixed-content problem in the PRD is now actually dissolved, not just described.
 
-- [ ] Split `server.js` into modular routes: metrics, device control, integration proxying.
-- [ ] Move the Hue calls out of the browser and into the server.
-- [ ] Keep the existing iMessage plan-scan route working through the refactor.
+- [x] Split into modules. `server.js` is 38 lines of wiring; routes live in `server/routes/`
+      (`metrics`, `events`, `plans`, `hue`) and the iMessage reader in `server/imessage.js`.
+      The Apple-epoch offset is a named constant now — getting it wrong shifts every message by
+      31 years, silently.
+- [x] **Hue moved server-side.** `POST /api/hue/lights` and `PUT /api/hue/state` proxy to the
+      bridge. The browser no longer touches the LAN. 4s timeout so a wrong IP fails fast, bridge
+      error descriptions passed through, and partial failure is reported rather than swallowed —
+      one dead bulb no longer looks like success.
+- [x] Plan-scan route still works through the refactor — `/api/plans/health` verified.
+
+**Untested against real hardware:** no bridge is connected, so only the failure paths were
+exercised (bad IP → "No answer from the bridge at … within 4s", surfaced in the UI). The success
+path needs Mark's bridge IP and API key.
 
 ## Next — Task 5: collectors
 
