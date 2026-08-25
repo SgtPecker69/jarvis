@@ -229,7 +229,18 @@ if they differ — that's a 2-minute change in `server/ingest/parsers.js`.
     competes with the accent. Archivo 200 for figures, IBM Plex Mono for labels.
 
 - **Task 9 — break up `App.jsx`.** Hooks, components, one file per view. Deliberately after the
-  design system, so it's split along the lines the new UI actually needs.
+  design system, so it's split along the lines the new UI actually needs. Started: `src/ui/`
+  (`Icon`, `kit`, `holo`, `helmet`, `command`) and `src/styles/tokens.js` are extracted.
+  `App.jsx` is still the monolith for the views themselves.
+
+- **Views converted to Mark 42 — DONE 2026-08-25.** All twelve now speak one language. Done by
+  rewriting the five shared primitives rather than the views: `HUDCard` became a plate (hairline,
+  gold tick, no box), `Metric` a mono readout, `GlowBar` a rule that fills, `HUDInput` an
+  underline, `StatusDot` a filled/open diamond, and the integrations card a list of plates.
+  Eleven views inherited the redesign without being touched.
+  The floating voice orb was removed — voice is on the command line and in the palette, so it was
+  a third route to the same thing.
+
 - **Task 10 — rebuild core views on live data.** Briefing, Analytics, Environment, Sleep, Body.
   Body pairs weight trend with strength maintenance in one view — target 165-170 from 180-185,
   and lifts holding is what proves it's fat and not muscle coming off.

@@ -867,37 +867,14 @@ ${webhooks.webhooks.filter(w=>w.enabled).map(w=>`- id:"${w.id}" name:"${w.name}"
 // these. Depth now comes from the material (see .hud-card), not from corner
 // brackets drawn on all four corners of every card. Decoration applied
 // uniformly stops meaning anything; the accent survives as a single hairline.
-function HUDCard({ title, children, accent = C.cyan, style = {}, className = "", glow = false }) {
+// A plate: a hairline rule, a gold tick, a label, and the space beneath it.
+// There is no box. Boxing every group is what made the earlier designs read as
+// a web page rather than an instrument — see DECISIONS.md.
+function HUDCard({ title, children, accent = C.gold, style = {}, className = "", glow = false }) {
   return (
-    <div className={`hud-card ${className}`} style={{
-      padding:"18px 20px",
-      marginBottom:14,
-      ...style,
-    }}>
-      {/* One accent hairline along the top edge, brightest at the left. */}
-      <div style={{
-        position:"absolute", top:0, left:18, right:18, height:1, borderRadius:1,
-        background:`linear-gradient(90deg, ${accent}00, ${accent}70 18%, ${accent}18 60%, transparent)`,
-        pointerEvents:"none",
-      }} />
-
-      {glow && (
-        <div style={{
-          position:"absolute", inset:0, borderRadius:RADIUS.lg, pointerEvents:"none",
-          background:`radial-gradient(ellipse 80% 60% at 50% 0%, ${accent}12 0%, transparent 70%)`,
-        }} />
-      )}
-
+    <div className={`plate ${className}`} style={{ marginBottom: 30, ...style }}>
       {title && (
-        <div style={{
-          display:"flex", alignItems:"center", gap:8, marginBottom:14,
-          fontSize:10.5, fontWeight:620, letterSpacing:"0.09em",
-          textTransform:"uppercase", color:accent,
-        }}>
-          <span style={{
-            width:5, height:5, borderRadius:"50%", background:accent,
-            boxShadow:`0 0 10px ${accent}`, flexShrink:0,
-          }} />
+        <div className="hud-label" style={{ color: C.dimMid, marginBottom: 16 }}>
           {title}
         </div>
       )}
@@ -906,43 +883,34 @@ function HUDCard({ title, children, accent = C.cyan, style = {}, className = "",
   );
 }
 
-function GlowBar({ pct, color = C.cyan, height = 5 }) {
+// A rule that fills. No glow — the value should read, not the container.
+function GlowBar({ pct, color = C.gold, height = 1 }) {
   return (
     <div style={{
-      width:"100%", height, marginTop:11, borderRadius:height,
-      background:"rgba(255,255,255,0.07)", overflow:"hidden",
+      height, marginTop: 13, background: C.lineSoft, position: "relative",
     }}>
       <div style={{
-        width:`${Math.min(100, Math.max(0, pct || 0))}%`, height:"100%",
-        borderRadius:height,
-        background:`linear-gradient(90deg, ${color}88, ${color})`,
-        boxShadow:`0 0 12px ${color}66`,
-        // Slow and eased — a bar that snaps reads as a redraw, not a change.
-        transition:`width 900ms ${MOTION.ease}`,
+        position: "absolute", inset: 0,
+        width: `${Math.min(100, Math.max(0, pct || 0))}%`,
+        background: color,
+        transition: `width 900ms ${MOTION.lock}`,
       }} />
     </div>
   );
 }
 
-// The number is the point, so it gets the size and the tabular figures. The
-// label recedes. That ordering is most of what makes a dashboard readable.
+// A readout states a measurement: mono figure, thin at size, unit set apart,
+// label above and quiet. The number leads; everything else recedes.
 function Metric({ label, value, unit, sub, color = C.textBright, pct, barColor }) {
   return (
-    <div style={{
-      background:"rgba(255,255,255,0.035)",
-      border:`1px solid ${C.borderDim}`,
-      borderRadius:RADIUS.md,
-      padding:"14px 16px",
-      position:"relative",
-      overflow:"hidden",
-    }}>
-      <div className="label" style={{ marginBottom:8 }}>{label}</div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
-        <span className="data-num" style={{ fontSize:30, fontWeight:680, color, lineHeight:1 }}>{value}</span>
-        {unit && <span style={{ fontSize:12, color:C.dimMid, fontWeight:520 }}>{unit}</span>}
+    <div>
+      {label && <div className="hud-label" style={{ color: C.dim, marginBottom: 11 }}>{label}</div>}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <span className="hud-num" style={{ ...TYPE.statSm, color }}>{value}</span>
+        {unit && <span style={{ ...TYPE.small, color: C.dim }}>{unit}</span>}
       </div>
-      {sub && <div style={{ fontSize:12, color:C.dimMid, marginTop:5 }}>{sub}</div>}
-      {pct !== undefined && <GlowBar pct={pct} color={barColor || color} />}
+      {sub && <div style={{ ...TYPE.small, color: C.dim, marginTop: 6 }}>{sub}</div>}
+      {pct !== undefined && <GlowBar pct={pct} color={barColor || C.lineHot} />}
     </div>
   );
 }
@@ -1020,70 +988,44 @@ function ArcReactor({ size = 60, state = "idle" }) {
 // no hierarchy in return. The primary action gets the cyan→violet gradient; it's
 // the only element on a screen allowed to have it, which is what makes it read
 // as the primary action.
+// The look lives in .hud-btn. Only the primary variant differs, and it differs
+// by taking the gold — the one accent, used once per screen.
 function HUDBtn({ onClick, children, variant = "default", style = {}, disabled = false }) {
-  const variants = {
-    primary: {
-      background: `linear-gradient(135deg, ${C.cyan}2E, ${C.violet}24)`,
-      border:     `1px solid ${C.cyan}66`,
-      color:      C.cyanBright,
-      boxShadow:  `0 2px 16px ${C.cyan}22, inset 0 1px 0 rgba(255,255,255,0.10)`,
-    },
-    success: {
-      background: `linear-gradient(135deg, ${C.green}26, ${C.green}12)`,
-      border:     `1px solid ${C.green}55`,
-      color:      C.green,
-      boxShadow:  `inset 0 1px 0 rgba(255,255,255,0.08)`,
-    },
-    danger: {
-      background: `linear-gradient(135deg, ${C.red}26, ${C.red}12)`,
-      border:     `1px solid ${C.red}55`,
-      color:      C.red,
-      boxShadow:  `inset 0 1px 0 rgba(255,255,255,0.08)`,
-    },
-    default: {
-      background: "rgba(255,255,255,0.055)",
-      border:     `1px solid ${C.border}`,
-      color:      C.text,
-      boxShadow:  "inset 0 1px 0 rgba(255,255,255,0.05)",
-    },
-  };
+  const accent = { primary: C.gold, success: C.green, danger: C.red }[variant];
   return (
-    <button className="hud-btn" onClick={onClick} disabled={disabled}
-      style={{ ...(variants[variant] || variants.default), ...style }}>
+    <button
+      className="hud-btn"
+      onClick={onClick}
+      disabled={disabled}
+      style={accent ? { borderColor: accent, color: accent, ...style } : style}
+    >
       {children}
     </button>
   );
 }
 
+// An underline, not a box. Same reasoning as the plate.
 function HUDInput({ label, style = {}, ...props }) {
   return (
-    <div style={{ marginBottom:14, ...style }}>
-      {label && <div className="label" style={{ marginBottom:7 }}>{label}</div>}
+    <div style={{ marginBottom: 20, ...style }}>
+      {label && <div className="hud-label" style={{ color: C.dim, marginBottom: 9 }}>{label}</div>}
       <input className="hud-input" {...props} style={{
-        width:"100%",
-        background:"rgba(255,255,255,0.045)",
-        border:`1px solid ${C.border}`,
-        borderRadius:RADIUS.sm,
-        padding:"11px 14px",
-        color:C.textBright,
-        fontSize:14,
-        outline:"none",
-        fontFamily:"inherit",
+        width: "100%", padding: "9px 0", fontFamily: "inherit",
+        fontSize: 16, fontWeight: 350, color: C.textBright,
       }} />
     </div>
   );
 }
 
+// A filled diamond reads as engaged and an open one as idle, without needing
+// colour to carry the whole message.
 function StatusDot({ on, label }) {
   return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:on ? C.green : C.dimMid, fontWeight:500, letterSpacing:"0.04em" }}>
-      <span style={{
-        width:7, height:7, borderRadius:"50%",
-        background:on ? C.green : C.dimMid,
-        boxShadow:on ? `0 0 8px ${C.green}, 0 0 16px ${C.green}55` : "none",
-        flexShrink:0,
-        animation:on ? "ambient-pulse 3s ease-in-out infinite" : "none",
-      }} />
+    <span className="hud-label" style={{
+      display: "inline-flex", alignItems: "center", gap: 7,
+      color: on ? C.text : C.dim,
+    }}>
+      <span style={{ color: on ? C.gold : C.line }}>{on ? "\u25C6" : "\u25C7"}</span>
       {label}
     </span>
   );
@@ -3376,30 +3318,35 @@ function IntegrationsTab({ jarvis, spotify, calendar, crypto, webhooks }) {
 
   const toggle = id => setOpen(s => ({ ...s, [id]: !s[id] }));
 
+  // Integrations as a list of plates, expanded in place. The emoji that used to
+  // sit here came from another vendor's design language and couldn't take the
+  // accent; a diamond mark carries the same state and belongs to this palette.
   const IntCard = ({ id, icon, title, status, statusOk, children }) => (
-    <div style={{ background:"rgba(0,18,42,0.7)", border:`1px solid ${statusOk ? C.cyan+"33" : C.border}`,
-      borderRadius:10, marginBottom:10, overflow:"hidden", transition:"border-color 0.3s" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"14px 16px", cursor:"pointer" }} onClick={() => toggle(id)}>
-        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          <span style={{ fontSize:20 }}>{icon}</span>
-          <div>
-            <div style={{ fontSize:13, fontWeight:600, color:C.text }}>{title}</div>
-            <div style={{ fontSize:11, color:statusOk ? C.green : C.dim, marginTop:2 }}>{status}</div>
+    <div className="plate" style={{ marginBottom: 0, paddingBottom: open[id] ? 24 : 16 }}>
+      <button
+        onClick={() => toggle(id)}
+        aria-expanded={!!open[id]}
+        style={{
+          display: "flex", alignItems: "center", gap: 14, width: "100%",
+          background: "none", border: "none", padding: 0, cursor: "pointer",
+          textAlign: "left", fontFamily: "inherit",
+        }}
+      >
+        <span style={{ color: statusOk ? C.gold : C.line, fontSize: 11 }}>
+          {statusOk ? "\u25C6" : "\u25C7"}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ ...TYPE.body, color: C.textBright }}>{title}</div>
+          <div className="hud-label" style={{ color: statusOk ? C.dimMid : C.dim, marginTop: 4 }}>
+            {status}
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:8, height:8, borderRadius:"50%", background:statusOk ? C.green : C.dim,
-            boxShadow:statusOk ? `0 0 6px ${C.green}` : "none" }} />
-          <span style={{ color:C.dim, fontSize:13 }}>{open[id] ? "▲" : "▼"}</span>
-        </div>
-      </div>
-      {open[id] && (
-        <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${C.borderDim}` }}>
-          <div style={{ height:14 }} />
-          {children}
-        </div>
-      )}
+        <span className="hud-label" style={{ marginLeft: "auto", color: C.dim }}>
+          {open[id] ? "close" : "open"}
+        </span>
+      </button>
+
+      {open[id] && <div className="rise" style={{ marginTop: 22 }}>{children}</div>}
     </div>
   );
 
@@ -4491,8 +4438,6 @@ export default function Jarvis() {
         {tab==="settings"      && <SettingsTab jarvis={jarvis} />}
       </div>
 
-      {/* Floating orb */}
-      {tab !== "briefing" && tab !== "ai" && <FloatingOrb jarvis={jarvis} />}
     </div>
   );
 }
